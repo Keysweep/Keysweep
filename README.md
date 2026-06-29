@@ -2,6 +2,10 @@
 
 ![Banner](docs/images/banner.png)
 
+[![License](https://img.shields.io/github/license/Keysweep/Keysweep)](LICENSE)
+[![Rust](https://img.shields.io/badge/Rust-1.70%2B-orange)](https://www.rust-lang.org/)
+[![Release](https://img.shields.io/github/v/release/Keysweep/Keysweep)](https://github.com/Keysweep/Keysweep/releases)
+
 A fast, modular security testing toolkit written in Rust.
 
 Keysweep combines three core capabilities into a single CLI:
