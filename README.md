@@ -1,5 +1,7 @@
 # Keysweep
 
+![Banner](docs/images/banner.png)
+
 A fast, modular security testing toolkit written in Rust.
 
 Keysweep combines three core capabilities into a single CLI:
@@ -46,6 +48,11 @@ Keysweep provides built-in documentation for every command.
 - keysweep login --help
 - keysweep fuzz --help
 - keysweep hash --help
+
+## Examples
+
+Hash Cracking Example
+![HashCrack](docs/images/hash_crack_example.png)
 
 ## Dependencies
 
