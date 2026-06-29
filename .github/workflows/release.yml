@@ -1,0 +1,97 @@
+name: Release
+
+on:
+    push:
+        tags:
+            - "v*"
+
+permissions:
+    contents: write
+
+env:
+    CARGO_TERM_COLOR: always
+
+jobs:
+    build:
+        name: Build (${{ matrix.name }})
+        runs-on: ${{ matrix.os }}
+
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - name: windows-x86_64
+                      os: windows-latest
+                      target: x86_64-pc-windows-msvc
+                      binary: keysweep.exe
+                      asset: keysweep-windows-x86_64.exe
+
+                    - name: linux-x86_64
+                      os: ubuntu-latest
+                      target: x86_64-unknown-linux-musl
+                      binary: keysweep
+                      asset: keysweep-linux-x86_64
+
+                    - name: macos-intel
+                      os: macos-13
+                      target: x86_64-apple-darwin
+                      binary: keysweep
+                      asset: keysweep-macos-x86_64
+
+                    - name: macos-apple-silicon
+                      os: macos-latest
+                      target: aarch64-apple-darwin
+                      binary: keysweep
+                      asset: keysweep-macos-aarch64
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - uses: dtolnay/rust-toolchain@stable
+              with:
+                  targets: ${{ matrix.target }}
+
+            - uses: Swatinem/rust-cache@v2
+
+            - name: Install musl tools
+              if: matrix.target == 'x86_64-unknown-linux-musl'
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y musl-tools
+
+            - name: Build
+              run: cargo build --release --target ${{ matrix.target }}
+
+            - name: Rename binary (Windows)
+              if: runner.os == 'Windows'
+              shell: pwsh
+              run: |
+                  Copy-Item target/${{ matrix.target }}/release/${{ matrix.binary }} ${{ matrix.asset }}
+
+            - name: Rename binary (Unix)
+              if: runner.os != 'Windows'
+              run: |
+                  cp target/${{ matrix.target }}/release/${{ matrix.binary }} ${{ matrix.asset }}
+
+            - name: Upload artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: ${{ matrix.asset }}
+                  path: ${{ matrix.asset }}
+
+    release:
+        name: Publish Release
+        needs: build
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Download artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  path: release
+
+            - name: Publish GitHub Release
+              uses: softprops/action-gh-release@v2
+              with:
+                  files: release/**/*
+                  generate_release_notes: true
