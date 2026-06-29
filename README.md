@@ -63,8 +63,9 @@ Hash Cracking Example
 - **clap** - Command-line argument parsing
 - **reqwest** - HTTP client
 - **crossbeam-channel** - Multi-threaded communication
+- **digest** - Algorithm Traits
 - **bcrypt** - Bcrypt hashing
-- **sha1, sha2** - SHA algorithms
+- **sha1, sha2, sha3** - SHA algorithms
 - **md-5, md4** - MD algorithms
 - **hmac** - HMAC authentication
 - **hex** - Hex encoding/decoding
