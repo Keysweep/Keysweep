@@ -99,13 +99,13 @@ pub fn load_wordlists(bindings: &[WordlistBinding]) -> Result<Vec<LoadedWordlist
     let mut out = Vec::with_capacity(bindings.len());
 
     for b in bindings {
-        if let Some(prev) = seen.insert(b.keyword.clone(), b.path.clone()) {
-            if prev != b.path {
-                return Err(format!(
-                    "keyword '{}' is bound to two different wordlists ('{}' and '{}')",
-                    b.keyword, prev, b.path
-                ));
-            }
+        if let Some(prev) = seen.insert(b.keyword.clone(), b.path.clone())
+            && prev != b.path
+        {
+            return Err(format!(
+                "keyword '{}' is bound to two different wordlists ('{}' and '{}')",
+                b.keyword, prev, b.path
+            ));
         }
 
         let file = File::open(&b.path).map_err(|e| format!("failed to open {}: {e}", b.path))?;

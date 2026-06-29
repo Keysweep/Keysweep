@@ -318,16 +318,16 @@ where
                     continue;
                 }
 
-                if let Some(min) = params.min_len {
-                    if word.len() < min {
-                        continue;
-                    }
+                if let Some(min) = params.min_len
+                    && word.len() < min
+                {
+                    continue;
                 }
 
-                if let Some(max) = params.max_len {
-                    if word.len() > max {
-                        continue;
-                    }
+                if let Some(max) = params.max_len
+                    && word.len() > max
+                {
+                    continue;
                 }
 
                 pb.inc(1);
