@@ -32,18 +32,6 @@ jobs:
                       binary: keysweep
                       asset: keysweep-linux-x86_64
 
-                    - name: macos-intel
-                      os: macos-13
-                      target: x86_64-apple-darwin
-                      binary: keysweep
-                      asset: keysweep-macos-x86_64
-
-                    - name: macos-apple-silicon
-                      os: macos-latest
-                      target: aarch64-apple-darwin
-                      binary: keysweep
-                      asset: keysweep-macos-aarch64
-
         steps:
             - uses: actions/checkout@v4
 
