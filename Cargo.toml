@@ -1,0 +1,20 @@
+[package]
+name = "keysweep"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bcrypt = "0.19.2"
+clap = { version = "4.6.1", features = ["derive"] }
+crossbeam-channel = "0.5.15"
+encoding_rs = "0.8.35"
+hex = "0.4.3"
+hmac = "0.13.0"
+indicatif = "0.18.4"
+md-5 = "0.11.0"
+md4 = "0.11.0"
+rand = "0.10.1"
+reqwest = { version = "0.13.4", features = ["blocking"] }
+sha-crypt = "0.6.0"
+sha1 = "0.11.0"
+sha2 = "0.11.0"
