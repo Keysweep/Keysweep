@@ -1,0 +1,69 @@
+name: Good First Issue
+description: Small, beginner-friendly tasks for new contributors.
+title: "[Good First Issue]: "
+labels:
+    - good first issue
+body:
+    - type: markdown
+      attributes:
+          value: |
+              ## Welcome 👋
+
+              Thanks for your interest in contributing to Keysweep!
+
+              This issue is intended for new contributors and should be approachable
+              without requiring deep knowledge of the codebase.
+
+    - type: textarea
+      id: summary
+      attributes:
+          label: Summary
+          description: Briefly describe the task.
+          placeholder: Explain what needs to be implemented or improved.
+      validations:
+          required: true
+
+    - type: textarea
+      id: goal
+      attributes:
+          label: Expected Outcome
+          description: What should be true once this issue is completed?
+          placeholder: Describe the expected result.
+      validations:
+          required: true
+
+    - type: textarea
+      id: hints
+      attributes:
+          label: Helpful Hints
+          description: Point contributors to relevant files, modules, or documentation.
+          placeholder: |
+              Example:
+              - src/hash/
+              - src/login/
+              - README.md
+      validations:
+          required: false
+
+    - type: textarea
+      id: acceptance
+      attributes:
+          label: Acceptance Criteria
+          description: Checklist of requirements before the issue can be closed.
+          placeholder: |
+              - Feature works as expected
+              - Code is formatted
+              - Tests pass
+              - Documentation updated if needed
+      validations:
+          required: true
+
+    - type: checkboxes
+      id: checklist
+      attributes:
+          label: Contributor Checklist
+          options:
+              - label: I have read the contributing guidelines.
+                required: true
+              - label: I have searched for existing issues before creating a new one.
+                required: true

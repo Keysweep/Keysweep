@@ -1,0 +1,43 @@
+name: Documentation
+description: Report missing, incorrect, or unclear documentation.
+title: "[Docs]: "
+labels:
+    - documentation
+body:
+    - type: markdown
+      attributes:
+          value: |
+              Help us improve the documentation for Keysweep.
+
+    - type: textarea
+      id: issue
+      attributes:
+          label: Documentation Issue
+          description: What is missing, incorrect, or confusing?
+          placeholder: Describe the documentation problem.
+      validations:
+          required: true
+
+    - type: input
+      id: location
+      attributes:
+          label: Location
+          description: Where is the issue?
+          placeholder: README.md, src/login/mod.rs, wiki, etc.
+
+    - type: textarea
+      id: suggestion
+      attributes:
+          label: Suggested Improvement
+          description: How should it be improved?
+          placeholder: Explain the change you'd like to see.
+      validations:
+          required: true
+
+    - type: checkboxes
+      id: checklist
+      attributes:
+          label: Checklist
+          options:
+              - label: I searched for existing documentation issues.
+                required: true

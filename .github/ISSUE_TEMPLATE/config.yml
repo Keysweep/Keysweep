@@ -1,0 +1,10 @@
+blank_issues_enabled: false
+
+contact_links:
+    - name: 💬 Questions & Discussions
+      url: https://github.com/Keysweep/Keysweep/discussions
+      about: Ask questions, share ideas, or start a discussion.
+
+    - name: 📖 Contributing Guide
+      url: https://github.com/Keysweep/Keysweep/blob/main/CONTRIBUTING.md
+      about: Read the contribution guidelines before opening a pull request.

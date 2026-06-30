@@ -1,0 +1,66 @@
+name: Feature Request
+description: Suggest a new feature or improvement for Keysweep.
+title: "[Feature]: "
+labels:
+    - enhancement
+body:
+    - type: markdown
+      attributes:
+          value: |
+              Thanks for helping improve Keysweep! Please describe your idea as clearly as possible.
+
+    - type: textarea
+      id: problem
+      attributes:
+          label: Problem
+          description: What problem are you trying to solve?
+          placeholder: Describe the limitation or pain point.
+      validations:
+          required: true
+
+    - type: textarea
+      id: solution
+      attributes:
+          label: Proposed Solution
+          description: Describe the feature or improvement you'd like to see.
+          placeholder: Explain your idea.
+      validations:
+          required: true
+
+    - type: textarea
+      id: alternatives
+      attributes:
+          label: Alternatives Considered
+          description: Have you considered another approach?
+          placeholder: Describe any alternatives you've thought about.
+
+    - type: textarea
+      id: additional
+      attributes:
+          label: Additional Context
+          description: Add screenshots, examples, references, or anything else that helps.
+          placeholder: Optional.
+
+    - type: dropdown
+      id: area
+      attributes:
+          label: Affected Area
+          options:
+              - CLI
+              - Login
+              - Fuzzing
+              - Hash Cracking
+              - Output
+              - Performance
+              - Documentation
+              - Other
+      validations:
+          required: true
+
+    - type: checkboxes
+      id: checklist
+      attributes:
+          label: Checklist
+          options:
+              - label: I searched for existing feature requests before creating this one.
+                required: true
