@@ -72,7 +72,6 @@ Hash Cracking Example
 - **indicatif** - Progress bars
 - **sha-crypt** - SHA crypt password hashing
 - **rand** - Random number generation
-- **encoding_rs** - Character encoding
 
 Contributions are welcome! Please feel free to submit pull requests or open issues for bugs and feature requests.
 

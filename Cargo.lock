@@ -911,7 +911,6 @@ dependencies = [
  "clap",
  "crossbeam-channel",
  "digest",
- "encoding_rs",
  "hex",
  "hmac",
  "indicatif",
