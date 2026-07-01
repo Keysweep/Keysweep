@@ -203,7 +203,7 @@ fn sub_label(sub: &keywords::Substitution) -> String {
 }
 
 pub fn handle_fuzz(fuzz: FuzzArgs) {
-    let lists = match keywords::load_wordlists(&fuzz.fuzz_lists) {
+    let lists = match keywords::load_wordlists(&fuzz.fuzz_lists, fuzz.general.filter) {
         Ok(l) => l,
         Err(e) => {
             eprintln!("{RED}error loading wordlists: {e}{RESET}");

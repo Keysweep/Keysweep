@@ -2,6 +2,7 @@ use indicatif::ProgressBar;
 
 use crate::CredentialSource;
 use crate::shared::args::GeneralArgs;
+use crate::shared::line_validation::is_valid_line;
 use crate::utils::create_progress;
 use crate::{GREEN, RESET};
 use crossbeam_channel::bounded;
@@ -15,7 +16,7 @@ use std::{
 pub fn login_iterator<F>(
     users: CredentialSource,
     passwords: CredentialSource,
-    threads: usize,
+    general_args: GeneralArgs,
     validator: F,
 ) -> Result<(), String>
 where
@@ -29,8 +30,9 @@ where
         CredentialSource::Wordlist(path) => {
             BufReader::new(File::open(path).map_err(|e| e.to_string())?)
                 .lines()
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| e.to_string())?
+                .map_while(Result::ok)
+                .filter(|line| is_valid_line(line, general_args.filter.clone()))
+                .collect::<Vec<_>>()
         }
     });
 
@@ -39,6 +41,8 @@ where
         CredentialSource::Wordlist(path) => {
             BufReader::new(File::open(path).map_err(|e| e.to_string())?)
                 .lines()
+                .map_while(Result::ok)
+                .filter(|line| is_valid_line(line, general_args.filter.clone()))
                 .count() as u64
         }
     };
@@ -48,12 +52,12 @@ where
 
     match users {
         CredentialSource::Single(user) => {
-            try_passwords(&user, passwords, pb.clone(), validator, threads)
+            try_passwords(&user, passwords, pb.clone(), validator, general_args)
                 .map_err(|e| e.to_string())?;
         }
 
         CredentialSource::Wordlist(path) => {
-            let (tx, rx) = bounded::<String>(threads * 2);
+            let (tx, rx) = bounded::<String>(general_args.threads * 2);
             let rx = Arc::new(std::sync::Mutex::new(rx));
 
             // Producer
@@ -74,13 +78,14 @@ where
 
             drop(tx);
 
-            let mut workers = Vec::with_capacity(threads);
+            let mut workers = Vec::with_capacity(general_args.threads);
 
-            for _ in 0..threads {
+            for _ in 0..general_args.threads {
                 let rx = rx.clone();
                 let passwords = passwords.clone();
                 let validator = validator.clone();
                 let pb = pb.clone();
+                let general_args = general_args.clone();
 
                 workers.push(thread::spawn(move || {
                     loop {
@@ -99,7 +104,7 @@ where
                             passwords.clone(),
                             pb.clone(),
                             validator.clone(),
-                            threads,
+                            general_args.clone(),
                         );
                     }
                 }));
@@ -121,7 +126,7 @@ pub fn try_passwords<F>(
     passwords: Arc<Vec<String>>,
     pb: Arc<ProgressBar>,
     validator: Arc<F>,
-    threads: usize,
+    general_args: GeneralArgs,
 ) -> std::io::Result<()>
 where
     F: Fn(&str, &str) -> bool + Send + Sync + 'static,
@@ -130,9 +135,9 @@ where
     let index = Arc::new(AtomicUsize::new(0));
     let user = Arc::new(user.to_owned());
 
-    let mut workers = Vec::with_capacity(threads);
+    let mut workers = Vec::with_capacity(general_args.threads);
 
-    for _ in 0..threads {
+    for _ in 0..general_args.threads {
         let found = found.clone();
         let index = index.clone();
         let passwords = passwords.clone();
@@ -185,14 +190,15 @@ where
 {
     let validator = Arc::new(validator);
 
-    let words = Arc::new(
+    let lines = Arc::new(
         BufReader::new(File::open(&wordlist).map_err(|e| e.to_string())?)
             .lines()
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| e.to_string())?,
+            .map_while(Result::ok)
+            .filter(|line| is_valid_line(line, general_args.filter.clone()))
+            .collect::<Vec<_>>(),
     );
 
-    let word_count = words.len() as u64;
+    let line_count = lines.len() as u64;
 
     let hash_count = match &hashes {
         CredentialSource::Single(_) => 1,
@@ -203,12 +209,12 @@ where
         }
     };
 
-    let total = hash_count * word_count;
+    let total = hash_count * line_count;
 
     let pb = create_progress(total);
     match hashes {
         CredentialSource::Single(hash) => {
-            try_hashes(&hash, words, pb.clone(), validator, general_args)
+            try_hashes(&hash, lines, pb.clone(), validator, general_args)
                 .map_err(|e| e.to_string())?;
         }
 
@@ -236,7 +242,7 @@ where
 
             for _ in 0..general_args.threads {
                 let rx = rx.clone();
-                let words = words.clone();
+                let lines = lines.clone();
                 let validator = validator.clone();
                 let pb = pb.clone();
                 let general_args = general_args.clone();
@@ -255,7 +261,7 @@ where
 
                         let _ = try_hashes(
                             &hash,
-                            words.clone(),
+                            lines.clone(),
                             pb.clone(),
                             validator.clone(),
                             general_args.clone(),
@@ -276,7 +282,7 @@ where
 
 pub fn try_hashes<F>(
     hash: &str,
-    words: Arc<Vec<String>>,
+    lines: Arc<Vec<String>>,
     pb: Arc<ProgressBar>,
     validator: Arc<F>,
     general_args: GeneralArgs,
@@ -295,10 +301,9 @@ where
         let found = found.clone();
         let index = index.clone();
         let validator = validator.clone();
-        let words = words.clone();
+        let lines = lines.clone();
         let hash = hash.clone();
         let pb = pb.clone();
-        let params = general_args.clone();
         let hash_bytes = hash_bytes.clone();
 
         workers.push(thread::spawn(move || {
@@ -308,33 +313,17 @@ where
                 }
 
                 let i = index.fetch_add(1, Ordering::Relaxed);
-                if i >= words.len() {
+                if i >= lines.len() {
                     break;
                 }
 
-                let word = &words[i];
-
-                if params.skip_empty && word.is_empty() {
-                    continue;
-                }
-
-                if let Some(min) = params.min_len
-                    && word.len() < min
-                {
-                    continue;
-                }
-
-                if let Some(max) = params.max_len
-                    && word.len() > max
-                {
-                    continue;
-                }
+                let line = &lines[i];
 
                 pb.inc(1);
 
-                if validator(hash_bytes.as_deref(), &hash, word) {
+                if validator(hash_bytes.as_deref(), &hash, line) {
                     pb.println(format!(
-                        "[{GREEN}+{RESET}] Hash: {GREEN}{hash}{RESET} Word: {GREEN}{word}{RESET}",
+                        "[{GREEN}+{RESET}] Hash: {GREEN}{hash}{RESET} Word: {GREEN}{line}{RESET}",
                     ));
 
                     found.store(true, Ordering::Relaxed);

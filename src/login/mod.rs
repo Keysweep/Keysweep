@@ -129,7 +129,7 @@ pub struct LoginParams {
     pub users: CredentialSource,
     pub passwords: CredentialSource,
 
-    pub threads: usize,
+    pub general_args: GeneralArgs,
 }
 
 /// Resolve a `(single, list)` CLI pair — exactly one is `Some`, enforced by
@@ -145,7 +145,6 @@ fn resolve_credential_source(single: Option<String>, list: Option<String>) -> Cr
 pub fn handle_login(login: LoginArgs) {
     let users = resolve_credential_source(login.username, login.user_list);
     let passwords = resolve_credential_source(login.password, login.pass_list);
-    let threads = login.general.threads;
 
     let client = reqwest::blocking::Client::new();
 
@@ -161,7 +160,7 @@ pub fn handle_login(login: LoginArgs) {
                 LoginParams {
                     users,
                     passwords,
-                    threads,
+                    general_args: login.general,
                 },
                 FormParams {
                     client,

@@ -5,6 +5,9 @@ use std::io::{BufRead, BufReader};
 use std::str::FromStr;
 use std::sync::Arc;
 
+use crate::shared::args::WordlistFilter;
+use crate::shared::line_validation::is_valid_line;
+
 /// Error type for keyword/wordlist parsing. A plain `String` won't satisfy
 /// clap's derived `value_parser`, which requires `FromStr::Err: std::error::Error`.
 #[derive(Debug)]
@@ -94,7 +97,10 @@ pub struct LoadedWordlist {
     pub words: Arc<Vec<String>>,
 }
 
-pub fn load_wordlists(bindings: &[WordlistBinding]) -> Result<Vec<LoadedWordlist>, String> {
+pub fn load_wordlists(
+    bindings: &[WordlistBinding],
+    filter: WordlistFilter,
+) -> Result<Vec<LoadedWordlist>, String> {
     let mut seen = HashMap::new();
     let mut out = Vec::with_capacity(bindings.len());
 
@@ -114,7 +120,7 @@ pub fn load_wordlists(bindings: &[WordlistBinding]) -> Result<Vec<LoadedWordlist
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| format!("failed to read {}: {e}", b.path))?
             .into_iter()
-            .filter(|l| !l.is_empty())
+            .filter(|l| is_valid_line(l, filter.clone()))
             .collect();
 
         if words.is_empty() {

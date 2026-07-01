@@ -59,7 +59,7 @@ pub fn brute_form(login_params: LoginParams, form_params: FormParams) {
     let result = login_iterator(
         login_params.users,
         login_params.passwords,
-        login_params.threads,
+        login_params.general_args,
         form_auth,
     );
 

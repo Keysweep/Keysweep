@@ -10,6 +10,12 @@ pub struct GeneralArgs {
     #[arg(short = 't', long, default_value_t = 40, value_name = "NUM")]
     pub threads: usize,
 
+    #[command(flatten)]
+    pub filter: WordlistFilter,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct WordlistFilter {
     /// Skip words shorter than this length
     #[arg(short = 'n', long = "min-len", value_name = "NUM")]
     pub min_len: Option<usize>,
@@ -30,14 +36,14 @@ impl fmt::Display for GeneralArgs {
 
         p.field("Threads", self.threads)?;
 
-        if let Some(len) = self.min_len {
+        if let Some(len) = self.filter.min_len {
             p.field("Min Length", len)?;
         }
 
-        if let Some(len) = self.max_len {
+        if let Some(len) = self.filter.max_len {
             p.field("Max Length", len)?;
         }
-        p.field("Skip Empty", self.skip_empty)?;
+        p.field("Skip Empty", self.filter.skip_empty)?;
 
         write!(f, "{s}")
     }
