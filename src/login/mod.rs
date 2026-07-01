@@ -1,11 +1,10 @@
 pub mod form;
 
+use clap::{Args, Subcommand};
 use std::fmt;
 
-use clap::{Args, Subcommand};
-
 use crate::{
-    CredentialSource,
+    credentials::CredentialSource,
     login::form::{FormParams, brute_form},
     shared::{
         args::GeneralArgs,
@@ -132,19 +131,9 @@ pub struct LoginParams {
     pub general_args: GeneralArgs,
 }
 
-/// Resolve a `(single, list)` CLI pair — exactly one is `Some`, enforced by
-/// clap's `conflicts_with` — into the `CredentialSource` the brute-forcer expects.
-fn resolve_credential_source(single: Option<String>, list: Option<String>) -> CredentialSource {
-    match (single, list) {
-        (Some(value), None) => CredentialSource::Single(value),
-        (None, Some(path)) => CredentialSource::Wordlist(path),
-        _ => unreachable!("clap enforces exactly one of these two args is set"),
-    }
-}
-
 pub fn handle_login(login: LoginArgs) {
-    let users = resolve_credential_source(login.username, login.user_list);
-    let passwords = resolve_credential_source(login.password, login.pass_list);
+    let users = CredentialSource::from_pair(login.username, login.user_list);
+    let passwords = CredentialSource::from_pair(login.password, login.pass_list);
 
     let client = reqwest::blocking::Client::new();
 

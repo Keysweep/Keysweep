@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{BG_YELLOW, GRAY, RESET, YELLOW};
+use crate::theme::{BG_YELLOW, GRAY, RESET, YELLOW};
 use indicatif::{ProgressBar, ProgressStyle};
 
 pub fn create_progress(total: u64) -> Arc<ProgressBar> {

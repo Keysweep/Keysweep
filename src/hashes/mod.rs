@@ -10,9 +10,10 @@ use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512};
 use std::fmt;
 
 use crate::{
-    CredentialSource,
+    credentials::CredentialSource,
     shared::{args::GeneralArgs, args_display::Pretty},
-    wordlists_iterator::hash_iterator,
+    theme::{GREEN, RESET},
+    wordlists_iterator::run_search,
 };
 
 type HmacMd5 = Hmac<Md5>;
@@ -278,18 +279,29 @@ fn verify(hash_type: HashType, hash_bytes: Option<&[u8]>, hash: &str, word: &str
 }
 
 pub fn handle_hash(hash: HashArgs) {
-    let hashes = match (hash.hash, hash.hash_list) {
-        (Some(single), None) => CredentialSource::Single(single),
-        (None, Some(list)) => CredentialSource::Wordlist(list),
-        _ => unreachable!("clap enforces exactly one of --hash / --hash_list"),
-    };
-
+    let hashes = CredentialSource::from_pair(hash.hash, hash.hash_list);
     let hash_type = hash.hash_type;
-    let hash_crack = move |hash_bytes: Option<&[u8]>, hash: &str, word: &str| {
-        verify(hash_type, hash_bytes, hash, word)
+
+    // Decode each hash's hex once per target rather than once per candidate word.
+    let make_validator = move |target: &str| {
+        let hash_bytes = hex::decode(target).ok();
+        let target = target.to_owned();
+        move |word: &str| verify(hash_type, hash_bytes.as_deref(), &target, word)
     };
 
-    if let Err(err) = hash_iterator(hashes, hash.word_list, hash.general, hash_crack) {
+    let report = |hash: &str, word: &str| {
+        format!("[{GREEN}+{RESET}] Hash: {GREEN}{hash}{RESET} Word: {GREEN}{word}{RESET}")
+    };
+
+    let result = run_search(
+        hashes,
+        CredentialSource::Wordlist(hash.word_list),
+        hash.general,
+        make_validator,
+        report,
+    );
+
+    if let Err(err) = result {
         eprintln!("{err}");
     }
 }

@@ -1,341 +1,158 @@
+use std::fs::File;
+use std::io::{BufRead, BufReader};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::thread;
+
 use indicatif::ProgressBar;
 
-use crate::CredentialSource;
-use crate::shared::args::GeneralArgs;
+use crate::credentials::CredentialSource;
+use crate::shared::args::{GeneralArgs, WordlistFilter};
 use crate::shared::line_validation::is_valid_line;
 use crate::utils::create_progress;
-use crate::{GREEN, RESET};
-use crossbeam_channel::bounded;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::{
-    fs::File,
-    io::{BufRead, BufReader},
-    thread,
-};
-pub fn login_iterator<F>(
-    users: CredentialSource,
-    passwords: CredentialSource,
-    general_args: GeneralArgs,
-    validator: F,
-) -> Result<(), String>
-where
-    F: Fn(&str, &str) -> bool + Send + Sync + 'static,
-{
-    let validator = Arc::new(validator);
 
-    // Load passwords once.
-    let passwords = Arc::new(match passwords {
-        CredentialSource::Single(pass) => vec![pass],
-        CredentialSource::Wordlist(path) => {
-            BufReader::new(File::open(path).map_err(|e| e.to_string())?)
-                .lines()
-                .map_while(Result::ok)
-                .filter(|line| is_valid_line(line, general_args.filter.clone()))
-                .collect::<Vec<_>>()
+/// Read every line of `path`, applying the shared wordlist filter.
+fn read_filtered_lines(path: &str, filter: &WordlistFilter) -> Result<Vec<String>, String> {
+    let file = File::open(path).map_err(|e| format!("failed to open {path}: {e}"))?;
+    Ok(BufReader::new(file)
+        .lines()
+        .map_while(Result::ok)
+        .filter(|line| is_valid_line(line, filter.clone()))
+        .collect())
+}
+
+fn count_filtered_lines(path: &str, filter: &WordlistFilter) -> Result<u64, String> {
+    let file = File::open(path).map_err(|e| format!("failed to open {path}: {e}"))?;
+    Ok(BufReader::new(file)
+        .lines()
+        .map_while(Result::ok)
+        .filter(|line| is_valid_line(line, filter.clone()))
+        .count() as u64)
+}
+
+/// Search `candidates` for a single `target`, spread across up to `threads`
+/// scoped workers. Stops as soon as any worker finds a match, printing
+/// `report(target, candidate)` via the progress bar at most once.
+fn search_one(
+    target: &str,
+    candidates: &[String],
+    threads: usize,
+    pb: &ProgressBar,
+    validate: &(impl Fn(&str) -> bool + Sync),
+    report: &(impl Fn(&str, &str) -> String + Sync),
+) {
+    let found = AtomicBool::new(false);
+    let index = AtomicUsize::new(0);
+
+    thread::scope(|scope| {
+        for _ in 0..threads.max(1) {
+            scope.spawn(|| {
+                loop {
+                    if found.load(Ordering::Relaxed) {
+                        return;
+                    }
+
+                    let i = index.fetch_add(1, Ordering::Relaxed);
+                    let Some(candidate) = candidates.get(i) else {
+                        return;
+                    };
+
+                    pb.inc(1);
+
+                    if validate(candidate) {
+                        pb.println(report(target, candidate));
+                        found.store(true, Ordering::Relaxed);
+                        return;
+                    }
+                }
+            });
         }
     });
-
-    let user_count = match &users {
-        CredentialSource::Single(_) => 1,
-        CredentialSource::Wordlist(path) => {
-            BufReader::new(File::open(path).map_err(|e| e.to_string())?)
-                .lines()
-                .map_while(Result::ok)
-                .filter(|line| is_valid_line(line, general_args.filter.clone()))
-                .count() as u64
-        }
-    };
-
-    let total = user_count * passwords.len() as u64;
-    let pb = create_progress(total);
-
-    match users {
-        CredentialSource::Single(user) => {
-            try_passwords(&user, passwords, pb.clone(), validator, general_args)
-                .map_err(|e| e.to_string())?;
-        }
-
-        CredentialSource::Wordlist(path) => {
-            let (tx, rx) = bounded::<String>(general_args.threads * 2);
-            let rx = Arc::new(std::sync::Mutex::new(rx));
-
-            // Producer
-            {
-                let tx = tx.clone();
-
-                thread::spawn(move || {
-                    let file = File::open(path).ok()?;
-                    let reader = BufReader::new(file);
-
-                    for line in reader.lines().map_while(Result::ok) {
-                        let _ = tx.send(line);
-                    }
-
-                    Some(())
-                });
-            }
-
-            drop(tx);
-
-            let mut workers = Vec::with_capacity(general_args.threads);
-
-            for _ in 0..general_args.threads {
-                let rx = rx.clone();
-                let passwords = passwords.clone();
-                let validator = validator.clone();
-                let pb = pb.clone();
-                let general_args = general_args.clone();
-
-                workers.push(thread::spawn(move || {
-                    loop {
-                        let user = {
-                            let lock = rx.lock().unwrap();
-                            lock.recv().ok()
-                        };
-
-                        let user = match user {
-                            Some(user) => user,
-                            None => break,
-                        };
-
-                        let _ = try_passwords(
-                            &user,
-                            passwords.clone(),
-                            pb.clone(),
-                            validator.clone(),
-                            general_args.clone(),
-                        );
-                    }
-                }));
-            }
-
-            for worker in workers {
-                worker.join().unwrap();
-            }
-        }
-    }
-
-    pb.finish_with_message("Done");
-
-    Ok(())
 }
 
-pub fn try_passwords<F>(
-    user: &str,
-    passwords: Arc<Vec<String>>,
-    pb: Arc<ProgressBar>,
-    validator: Arc<F>,
+/// Brute-force `candidates` against every item in `targets` — e.g. every
+/// password against every username, or every wordlist entry against every
+/// hash.
+///
+/// The `threads` budget is spent at whichever level actually has more than
+/// one item to parallelize:
+/// - a single target searches `candidates` with the full thread pool.
+/// - multiple targets (a wordlist) are each handed to one worker, so the
+///   pool is spread across targets instead of nested per-target, avoiding a
+///   `threads` blow-up in OS threads.
+///
+/// `make_validator` runs once per target, so callers can precompute
+/// per-target state (e.g. decoding a hash's hex once) instead of repeating
+/// it for every candidate. `report` formats the message printed on a match.
+pub fn run_search<F, V>(
+    targets: CredentialSource,
+    candidates: CredentialSource,
     general_args: GeneralArgs,
-) -> std::io::Result<()>
-where
-    F: Fn(&str, &str) -> bool + Send + Sync + 'static,
-{
-    let found = Arc::new(AtomicBool::new(false));
-    let index = Arc::new(AtomicUsize::new(0));
-    let user = Arc::new(user.to_owned());
-
-    let mut workers = Vec::with_capacity(general_args.threads);
-
-    for _ in 0..general_args.threads {
-        let found = found.clone();
-        let index = index.clone();
-        let passwords = passwords.clone();
-        let validator = validator.clone();
-        let pb = pb.clone();
-        let user = user.clone();
-
-        workers.push(thread::spawn(move || {
-            loop {
-                if found.load(Ordering::Relaxed) {
-                    break;
-                }
-
-                let i = index.fetch_add(1, Ordering::Relaxed);
-                if i >= passwords.len() {
-                    break;
-                }
-
-                let pass = &passwords[i];
-
-                pb.inc(1);
-
-                if validator(&user, pass) {
-                    pb.println(format!(
-                        "[{GREEN}+{RESET}] Username: {GREEN}{user}{RESET} Password: {GREEN}{pass}{RESET}"
-                    ));
-
-                    found.store(true, Ordering::Relaxed);
-                    break;
-                }
-            }
-        }));
-    }
-
-    for worker in workers {
-        worker.join().unwrap();
-    }
-
-    Ok(())
-}
-
-pub fn hash_iterator<F>(
-    hashes: CredentialSource,
-    wordlist: String,
-    general_args: GeneralArgs,
-    validator: F,
+    make_validator: F,
+    report: impl Fn(&str, &str) -> String + Sync,
 ) -> Result<(), String>
 where
-    F: Fn(Option<&[u8]>, &str, &str) -> bool + Send + Sync + 'static,
+    F: Fn(&str) -> V + Sync,
+    V: Fn(&str) -> bool + Sync,
 {
-    let validator = Arc::new(validator);
-
-    let lines = Arc::new(
-        BufReader::new(File::open(&wordlist).map_err(|e| e.to_string())?)
-            .lines()
-            .map_while(Result::ok)
-            .filter(|line| is_valid_line(line, general_args.filter.clone()))
-            .collect::<Vec<_>>(),
-    );
-
-    let line_count = lines.len() as u64;
-
-    let hash_count = match &hashes {
-        CredentialSource::Single(_) => 1,
-        CredentialSource::Wordlist(path) => {
-            BufReader::new(File::open(path).map_err(|e| e.to_string())?)
-                .lines()
-                .count() as u64
-        }
+    let candidates = match candidates {
+        CredentialSource::Single(word) => vec![word],
+        CredentialSource::Wordlist(path) => read_filtered_lines(&path, &general_args.filter)?,
     };
 
-    let total = hash_count * line_count;
+    let target_count = match &targets {
+        CredentialSource::Single(_) => 1,
+        CredentialSource::Wordlist(path) => count_filtered_lines(path, &general_args.filter)?,
+    };
 
+    let total = target_count * candidates.len() as u64;
     let pb = create_progress(total);
-    match hashes {
-        CredentialSource::Single(hash) => {
-            try_hashes(&hash, lines, pb.clone(), validator, general_args)
-                .map_err(|e| e.to_string())?;
+    let threads = general_args.threads.max(1);
+
+    match targets {
+        CredentialSource::Single(target) => {
+            let validate = make_validator(&target);
+            search_one(&target, &candidates, threads, &pb, &validate, &report);
         }
 
-        CredentialSource::Wordlist(hashes_path) => {
-            let (tx, rx) = bounded::<String>(general_args.threads * 2);
-            let rx = Arc::new(std::sync::Mutex::new(rx));
+        CredentialSource::Wordlist(path) => {
+            let (tx, rx) = crossbeam_channel::bounded::<String>(threads * 2);
+            let filter = general_args.filter.clone();
 
-            // producer
-            {
-                let tx = tx.clone();
-                thread::spawn(move || {
-                    let file = File::open(hashes_path).ok()?;
-                    let reader = BufReader::new(file);
+            thread::scope(|scope| {
+                scope.spawn(move || {
+                    let Ok(file) = File::open(&path) else { return };
 
-                    for line in reader.lines().map_while(Result::ok) {
-                        let _ = tx.send(line);
+                    for line in BufReader::new(file).lines().map_while(Result::ok) {
+                        if !is_valid_line(&line, filter.clone()) {
+                            continue;
+                        }
+                        if tx.send(line).is_err() {
+                            return;
+                        }
                     }
-                    Some(())
                 });
-            }
 
-            drop(tx);
+                for _ in 0..threads {
+                    let rx = rx.clone();
+                    // Re-borrow the shared, non-'static state so `move` below
+                    // only takes ownership of these cheap references (plus
+                    // this worker's own `rx`), not the originals.
+                    let make_validator = &make_validator;
+                    let candidates = &candidates;
+                    let pb = &pb;
+                    let report = &report;
 
-            let mut workers = Vec::with_capacity(general_args.threads);
-
-            for _ in 0..general_args.threads {
-                let rx = rx.clone();
-                let lines = lines.clone();
-                let validator = validator.clone();
-                let pb = pb.clone();
-                let general_args = general_args.clone();
-
-                workers.push(thread::spawn(move || {
-                    loop {
-                        let hash = {
-                            let lock = rx.lock().unwrap();
-                            lock.recv().ok()
-                        };
-
-                        let hash = match hash {
-                            Some(h) => h,
-                            None => break,
-                        };
-
-                        let _ = try_hashes(
-                            &hash,
-                            lines.clone(),
-                            pb.clone(),
-                            validator.clone(),
-                            general_args.clone(),
-                        );
-                    }
-                }));
-            }
-
-            for w in workers {
-                w.join().unwrap();
-            }
+                    scope.spawn(move || {
+                        while let Ok(target) = rx.recv() {
+                            let validate = make_validator(&target);
+                            search_one(&target, candidates, 1, pb, &validate, report);
+                        }
+                    });
+                }
+            });
         }
     }
 
     pb.finish_with_message("Done");
-    Ok(())
-}
-
-pub fn try_hashes<F>(
-    hash: &str,
-    lines: Arc<Vec<String>>,
-    pb: Arc<ProgressBar>,
-    validator: Arc<F>,
-    general_args: GeneralArgs,
-) -> std::io::Result<()>
-where
-    F: Fn(Option<&[u8]>, &str, &str) -> bool + Send + Sync + 'static,
-{
-    let found = Arc::new(AtomicBool::new(false));
-    let index = Arc::new(AtomicUsize::new(0));
-    let hash_bytes = Arc::new(hex::decode(hash).ok());
-    let hash = Arc::new(hash.to_owned());
-
-    let mut workers = Vec::with_capacity(general_args.threads);
-
-    for _ in 0..general_args.threads {
-        let found = found.clone();
-        let index = index.clone();
-        let validator = validator.clone();
-        let lines = lines.clone();
-        let hash = hash.clone();
-        let pb = pb.clone();
-        let hash_bytes = hash_bytes.clone();
-
-        workers.push(thread::spawn(move || {
-            loop {
-                if found.load(Ordering::Relaxed) {
-                    break;
-                }
-
-                let i = index.fetch_add(1, Ordering::Relaxed);
-                if i >= lines.len() {
-                    break;
-                }
-
-                let line = &lines[i];
-
-                pb.inc(1);
-
-                if validator(hash_bytes.as_deref(), &hash, line) {
-                    pb.println(format!(
-                        "[{GREEN}+{RESET}] Hash: {GREEN}{hash}{RESET} Word: {GREEN}{line}{RESET}",
-                    ));
-
-                    found.store(true, Ordering::Relaxed);
-                    break;
-                }
-            }
-        }));
-    }
-
-    for w in workers {
-        w.join().unwrap();
-    }
-
     Ok(())
 }

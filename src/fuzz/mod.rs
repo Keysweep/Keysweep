@@ -15,8 +15,8 @@ use targets::{FireResult, FuzzTarget};
 
 use crate::shared::args::GeneralArgs;
 use crate::shared::args_display::{Pretty, fmt_vec};
+use crate::theme::{GREEN, MAGENTA, RED, RESET, YELLOW};
 use crate::utils::create_progress;
-use crate::{GREEN, MAGENTA, RED, RESET, YELLOW};
 
 #[derive(Subcommand, Debug)]
 pub enum FuzzMode {

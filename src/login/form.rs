@@ -1,9 +1,11 @@
-use std::sync::Arc;
-
 use reqwest::header::CONTENT_TYPE;
 
 use crate::{
-    bypass::ip::IpSpoofer, login::LoginParams, utils::warn, wordlists_iterator::login_iterator,
+    bypass::ip::IpSpoofer,
+    login::LoginParams,
+    theme::{GREEN, RESET},
+    utils::warn,
+    wordlists_iterator::run_search,
 };
 
 pub struct FormParams {
@@ -16,14 +18,14 @@ pub struct FormParams {
 }
 
 pub fn brute_form(login_params: LoginParams, form_params: FormParams) {
-    let spoofer = if let Some(spoof_nb) = form_params.spoof {
+    let spoofer = form_params.spoof.map(|count| {
         let mut s = IpSpoofer::new();
-        s.generate_ip(spoof_nb);
-        Some(Arc::new(s))
-    } else {
-        None
-    };
+        s.generate_ip(count);
+        s
+    });
 
+    let client = form_params.client;
+    let url = form_params.url;
     let user_field = form_params.user_field;
     let pass_field = form_params.pass_field;
     let invalid_text = form_params.invalid_text;
@@ -31,12 +33,11 @@ pub fn brute_form(login_params: LoginParams, form_params: FormParams) {
     if invalid_text.is_empty() {
         warn("Invalid Text is empty.");
     }
-    let form_auth = move |user: &str, pass: &str| -> bool {
-        // use a blocking client so we can run synchronously from main
-        let mut builder = form_params
-            .client
-            .post(&form_params.url)
-            .header(CONTENT_TYPE, "text/html");
+
+    // Submit one (user, pass) attempt; use a blocking client so we can run
+    // synchronously from the worker threads in `search::run_search`.
+    let submit = |user: &str, pass: &str| -> bool {
+        let mut builder = client.post(&url).header(CONTENT_TYPE, "text/html");
 
         if let Some(spoofer) = &spoofer {
             builder = builder.header("X-Forwarded-For", spoofer.select_ip());
@@ -49,18 +50,27 @@ pub fn brute_form(login_params: LoginParams, form_params: FormParams) {
         match res {
             Ok(r) => {
                 let text = r.text().unwrap_or_default();
-
                 !invalid_text.iter().any(|invalid| text.contains(invalid))
             }
             Err(_) => false,
         }
     };
 
-    let result = login_iterator(
+    let make_validator = |user: &str| {
+        let user = user.to_owned();
+        move |pass: &str| submit(&user, pass)
+    };
+
+    let report = |user: &str, pass: &str| {
+        format!("[{GREEN}+{RESET}] Username: {GREEN}{user}{RESET} Password: {GREEN}{pass}{RESET}")
+    };
+
+    let result = run_search(
         login_params.users,
         login_params.passwords,
         login_params.general_args,
-        form_auth,
+        make_validator,
+        report,
     );
 
     if let Err(err) = result {
