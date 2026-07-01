@@ -1,4 +1,4 @@
-use clap::{Args, Subcommand};
+use clap::Args;
 use digest::Digest;
 use hmac::{Hmac, KeyInit, Mac};
 use md4::Md4;
@@ -9,47 +9,19 @@ use sha2::{Sha224, Sha256, Sha384, Sha512};
 use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512};
 use std::fmt;
 
+pub mod ntlm;
+pub mod types;
+
 use crate::{
     credentials::CredentialSource,
+    hashes::{
+        ntlm::{verify_ntlm, verify_ntlmv2},
+        types::HashType,
+    },
     shared::{args::GeneralArgs, args_display::Pretty},
     theme::{GREEN, RESET},
     wordlists_iterator::run_search,
 };
-
-type HmacMd5 = Hmac<Md5>;
-
-#[derive(Subcommand, Debug, Clone, Copy)]
-enum HashType {
-    Bcrypt,
-
-    MD4,
-    MD5,
-
-    HMACMD4,
-    HMACMD5,
-
-    Ntlm,
-    NTLMV2,
-
-    SHA1,
-    SHA224,
-    SHA256,
-    SHA384,
-    SHA512,
-
-    SHA3_224,
-    SHA3_256,
-    SHA3_384,
-    SHA3_512,
-
-    HMACSHA1,
-    HMACSHA224,
-    HMACSHA256,
-    HMACSHA384,
-    HMACSHA512,
-
-    SHACrypt,
-}
 
 #[derive(Args, Debug)]
 pub struct HashArgs {
@@ -70,43 +42,6 @@ pub struct HashArgs {
 
     #[command(flatten)]
     general: GeneralArgs,
-}
-
-impl fmt::Display for HashType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let name = match self {
-            HashType::Bcrypt => "bcrypt",
-
-            HashType::MD4 => "MD4",
-            HashType::MD5 => "MD5",
-
-            HashType::HMACMD4 => "HMAC-MD4",
-            HashType::HMACMD5 => "HMAC-MD5",
-
-            HashType::Ntlm => "NTLM",
-            HashType::NTLMV2 => "NTLM v2",
-
-            HashType::SHA1 => "SHA-1",
-            HashType::SHA224 => "SHA-224",
-            HashType::SHA256 => "SHA-256",
-            HashType::SHA384 => "SHA-384",
-            HashType::SHA512 => "SHA-512",
-
-            HashType::SHA3_224 => "SHA3-224",
-            HashType::SHA3_256 => "SHA3-256",
-            HashType::SHA3_384 => "SHA3-384",
-            HashType::SHA3_512 => "SHA3-512",
-
-            HashType::HMACSHA1 => "HMAC-SHA-1",
-            HashType::HMACSHA224 => "HMAC-SHA-224",
-            HashType::HMACSHA256 => "HMAC-SHA-256",
-            HashType::HMACSHA384 => "HMAC-SHA-384",
-            HashType::HMACSHA512 => "HMAC-SHA-512",
-
-            HashType::SHACrypt => "SHA-crypt",
-        };
-        write!(f, "{name}")
-    }
 }
 
 impl fmt::Display for HashArgs {
@@ -167,78 +102,6 @@ pub fn verify_crypt(expected: &str, password: &str) -> bool {
     ShaCrypt::default()
         .verify_password(password.as_bytes(), &parsed)
         .is_ok()
-}
-
-/// NT hash = MD4(UTF-16LE(password)).
-fn nt_hash(password: &str) -> impl AsRef<[u8]> {
-    let mut hasher = Md4::new();
-    for unit in password.encode_utf16() {
-        hasher.update(unit.to_le_bytes());
-    }
-    hasher.finalize()
-}
-
-pub fn verify_ntlm(expected_bytes: Option<&[u8]>, password: &str) -> bool {
-    nt_hash(password).as_ref() == expected_bytes.expect("ntlm requires decoded bytes")
-}
-
-/// A parsed NetNTLMv2 challenge/response line, in the format:
-/// `username::domain:server_challenge:nt_proof:blob`
-#[derive(Debug)]
-pub struct NetNtlmV2 {
-    username: String,
-    domain: String,
-    server_challenge: Vec<u8>,
-    nt_proof: Vec<u8>,
-    blob: Vec<u8>,
-}
-
-pub fn parse_netntlmv2(line: &str) -> Result<NetNtlmV2, String> {
-    let mut parts = line.trim().splitn(7, ':');
-
-    let username = parts.next().ok_or("missing username")?.to_owned();
-
-    if !parts.next().unwrap_or("").is_empty() {
-        return Err("expected empty LM field".into());
-    }
-
-    let domain = parts.next().ok_or("missing domain")?.to_owned();
-    let server_challenge =
-        hex::decode(parts.next().ok_or("missing challenge")?).map_err(|e| e.to_string())?;
-    let nt_proof =
-        hex::decode(parts.next().ok_or("missing NT proof")?).map_err(|e| e.to_string())?;
-    let blob = hex::decode(parts.next().ok_or("missing blob")?).map_err(|e| e.to_string())?;
-
-    Ok(NetNtlmV2 {
-        username,
-        domain,
-        server_challenge,
-        nt_proof,
-        blob,
-    })
-}
-
-pub fn verify_ntlmv2(expected: &str, password: &str) -> bool {
-    let Ok(parsed) = parse_netntlmv2(expected) else {
-        return false;
-    };
-
-    let nt_hash = nt_hash(password);
-
-    // NTLMv2 key = HMAC-MD5(NT hash, Uppercase(username) || domain)
-    let identity = format!("{}{}", parsed.username.to_uppercase(), parsed.domain);
-    let mut mac = HmacMd5::new_from_slice(nt_hash.as_ref()).expect("HMAC accepts any key length");
-    for unit in identity.encode_utf16() {
-        mac.update(&unit.to_le_bytes());
-    }
-    let ntlmv2_key = mac.finalize().into_bytes();
-
-    // NT proof = HMAC-MD5(NTLMv2 key, ServerChallenge || Blob)
-    let mut mac = HmacMd5::new_from_slice(&ntlmv2_key).expect("HMAC accepts any key length");
-    mac.update(&parsed.server_challenge);
-    mac.update(&parsed.blob);
-
-    mac.finalize().into_bytes().as_slice() == parsed.nt_proof.as_slice()
 }
 
 /// Dispatch to the verifier matching `hash_type`. Digest-based types use
@@ -309,57 +172,6 @@ pub fn handle_hash(hash: HashArgs) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // ── NetNTLMv2 parsing ────────────────────────────────────────────────────────────
-
-    fn sample_netntlmv2_line() -> String {
-        // username::DOMAIN:<16-byte challenge>:<16-byte proof>:<blob>
-        format!(
-            "alice::CORP:{}:{}:{}",
-            "11".repeat(8),
-            "22".repeat(16),
-            "33".repeat(20)
-        )
-    }
-
-    #[test]
-    fn parse_netntlmv2_extracts_all_fields() {
-        let line = sample_netntlmv2_line();
-        let parsed = parse_netntlmv2(&line).unwrap();
-
-        assert_eq!(parsed.username, "alice");
-        assert_eq!(parsed.domain, "CORP");
-        assert_eq!(parsed.server_challenge, vec![0x11; 8]);
-        assert_eq!(parsed.nt_proof, vec![0x22; 16]);
-        assert_eq!(parsed.blob, vec![0x33; 20]);
-    }
-
-    #[test]
-    fn parse_netntlmv2_rejects_nonempty_lm_field() {
-        let line = format!(
-            "alice:SOMEHASH:CORP:{}:{}:{}",
-            "11".repeat(8),
-            "22".repeat(16),
-            "33".repeat(20)
-        );
-        assert!(parse_netntlmv2(&line).is_err());
-    }
-
-    #[test]
-    fn parse_netntlmv2_rejects_missing_fields() {
-        assert!(parse_netntlmv2("alice::CORP:abcd").is_err());
-    }
-
-    #[test]
-    fn parse_netntlmv2_rejects_invalid_hex() {
-        let line = "alice::CORP:zzzz:abcd:1234";
-        assert!(parse_netntlmv2(line).is_err());
-    }
-
-    #[test]
-    fn verify_ntlmv2_rejects_malformed_input() {
-        assert!(!verify_ntlmv2("not:a:valid:line", "password"));
-    }
 
     // ── Helper ────────────────────────────────────────────────────────────
     fn decoded(hex: &str) -> Vec<u8> {

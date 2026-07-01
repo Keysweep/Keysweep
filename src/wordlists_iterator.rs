@@ -10,23 +10,24 @@ use crate::shared::args::{GeneralArgs, WordlistFilter};
 use crate::shared::line_validation::is_valid_line;
 use crate::utils::create_progress;
 
-/// Read every line of `path`, applying the shared wordlist filter.
-fn read_filtered_lines(path: &str, filter: &WordlistFilter) -> Result<Vec<String>, String> {
+fn filtered_lines(
+    path: &str,
+    filter: &WordlistFilter,
+) -> Result<impl Iterator<Item = String>, String> {
     let file = File::open(path).map_err(|e| format!("failed to open {path}: {e}"))?;
+    let filter = filter.clone();
     Ok(BufReader::new(file)
         .lines()
         .map_while(Result::ok)
-        .filter(|line| is_valid_line(line, filter.clone()))
-        .collect())
+        .filter(move |line| is_valid_line(line, filter.clone())))
+}
+
+fn read_filtered_lines(path: &str, filter: &WordlistFilter) -> Result<Vec<String>, String> {
+    Ok(filtered_lines(path, filter)?.collect())
 }
 
 fn count_filtered_lines(path: &str, filter: &WordlistFilter) -> Result<u64, String> {
-    let file = File::open(path).map_err(|e| format!("failed to open {path}: {e}"))?;
-    Ok(BufReader::new(file)
-        .lines()
-        .map_while(Result::ok)
-        .filter(|line| is_valid_line(line, filter.clone()))
-        .count() as u64)
+    Ok(filtered_lines(path, filter)?.count() as u64)
 }
 
 /// Search `candidates` for a single `target`, spread across up to `threads`
