@@ -6,6 +6,7 @@ use std::fmt;
 use crate::{
     credentials::CredentialSource,
     login::form::{FormParams, brute_form},
+    outputs::OUTPUT_HANDLER,
     shared::{
         args::GeneralArgs,
         args_display::{Pretty, fmt_vec},
@@ -134,6 +135,11 @@ pub struct LoginParams {
 pub fn handle_login(login: LoginArgs) {
     let users = CredentialSource::from_pair(login.username, login.user_list);
     let passwords = CredentialSource::from_pair(login.password, login.pass_list);
+
+    OUTPUT_HANDLER
+        .lock()
+        .unwrap()
+        .set_formats(login.general.output_format.clone());
 
     let client = reqwest::blocking::Client::new();
 

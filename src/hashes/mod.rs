@@ -18,6 +18,7 @@ use crate::{
         ntlm::{verify_ntlm, verify_ntlmv2},
         types::HashType,
     },
+    outputs::OUTPUT_HANDLER,
     shared::{args::GeneralArgs, args_display::Pretty},
     theme::{GREEN, RESET},
     wordlists_iterator::run_search,
@@ -145,6 +146,11 @@ pub fn handle_hash(hash: HashArgs) {
     let hashes = CredentialSource::from_pair(hash.hash, hash.hash_list);
     let hash_type = hash.hash_type;
 
+    OUTPUT_HANDLER
+        .lock()
+        .unwrap()
+        .set_formats(hash.general.output_format.clone());
+
     // Decode each hash's hex once per target rather than once per candidate word.
     let make_validator = move |target: &str| {
         let hash_bytes = hex::decode(target).ok();
@@ -153,6 +159,7 @@ pub fn handle_hash(hash: HashArgs) {
     };
 
     let report = |hash: &str, word: &str| {
+        OUTPUT_HANDLER.lock().unwrap().write_hash(hash, word);
         format!("[{GREEN}+{RESET}] Hash: {GREEN}{hash}{RESET} Word: {GREEN}{word}{RESET}")
     };
 

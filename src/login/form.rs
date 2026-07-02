@@ -3,6 +3,7 @@ use reqwest::header::CONTENT_TYPE;
 use crate::{
     bypass::ip::IpSpoofer,
     login::LoginParams,
+    outputs::OUTPUT_HANDLER,
     theme::{GREEN, RESET},
     utils::warn,
     wordlists_iterator::run_search,
@@ -62,6 +63,7 @@ pub fn brute_form(login_params: LoginParams, form_params: FormParams) {
     };
 
     let report = |user: &str, pass: &str| {
+        OUTPUT_HANDLER.lock().unwrap().write_login(user, pass);
         format!("[{GREEN}+{RESET}] Username: {GREEN}{user}{RESET} Password: {GREEN}{pass}{RESET}")
     };
 

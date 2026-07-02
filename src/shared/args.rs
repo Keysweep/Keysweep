@@ -2,7 +2,7 @@ use std::fmt;
 
 use clap::Args;
 
-use crate::shared::args_display::Pretty;
+use crate::{outputs::OutputFormat, shared::args_display::Pretty};
 
 #[derive(Args, Debug, Clone)]
 pub struct GeneralArgs {
@@ -12,6 +12,10 @@ pub struct GeneralArgs {
 
     #[command(flatten)]
     pub filter: WordlistFilter,
+
+    /// Output format into a file (can be specified multiple times)
+    #[arg(short = 'o', long, value_name = "FORMAT")]
+    pub output_format: Vec<OutputFormat>,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -44,6 +48,11 @@ impl fmt::Display for GeneralArgs {
             p.field("Max Length", len)?;
         }
         p.field("Skip Empty", self.filter.skip_empty)?;
+
+        if !self.output_format.is_empty() {
+            let formats: Vec<String> = self.output_format.iter().map(|f| f.to_string()).collect();
+            p.field("Output Format", formats.join(", "))?;
+        }
 
         write!(f, "{s}")
     }

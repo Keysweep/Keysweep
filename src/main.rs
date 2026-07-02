@@ -6,6 +6,7 @@ use crate::{
     fuzz::{FuzzArgs, handle_fuzz},
     hashes::{HashArgs, handle_hash},
     login::{LoginArgs, handle_login},
+    outputs::OUTPUT_HANDLER,
     theme::print_banner,
 };
 
@@ -14,6 +15,7 @@ pub mod credentials;
 pub mod fuzz;
 pub mod hashes;
 pub mod login;
+pub mod outputs;
 pub mod shared;
 pub mod theme;
 pub mod utils;
@@ -58,4 +60,6 @@ fn main() {
         Command::Fuzz(fuzz) => handle_fuzz(fuzz),
         Command::Hash(hash) => handle_hash(hash),
     }
+
+    OUTPUT_HANDLER.lock().unwrap().save_to_files();
 }

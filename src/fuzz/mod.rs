@@ -13,6 +13,7 @@ use keywords::{CombineMode, WordlistBinding};
 use targets::http::{HttpTarget, parse_headers};
 use targets::{FireResult, FuzzTarget};
 
+use crate::outputs::OUTPUT_HANDLER;
 use crate::shared::args::GeneralArgs;
 use crate::shared::args_display::{Pretty, fmt_vec};
 use crate::theme::{GREEN, MAGENTA, RED, RESET, YELLOW};
@@ -226,6 +227,11 @@ pub fn handle_fuzz(fuzz: FuzzArgs) {
         }
     };
 
+    OUTPUT_HANDLER
+        .lock()
+        .unwrap()
+        .set_formats(fuzz.general.output_format.clone());
+
     let threads = fuzz.general.threads.max(1);
     let delay = Duration::from_millis(fuzz.delay_ms);
     let pb = create_progress(total);
@@ -295,6 +301,12 @@ fn run_worker(
                 "[{color}{label}{RESET}] {GREEN}{:<30}{RESET} : Size: {size:>6}, Elapsed: {elapsed_ms:>5}ms",
                 sub_label(&sub),
             ));
+            OUTPUT_HANDLER.lock().unwrap().write_fuzz(
+                sub_label(&sub).as_str(),
+                &status.to_string(),
+                size,
+                elapsed_ms,
+            );
         }
 
         pb.inc(1);
