@@ -79,6 +79,12 @@ pub struct OutputHandler {
     started_at: SystemTime,
 }
 
+impl Default for OutputHandler {
+    fn default() -> Self {
+        OutputHandler::new()
+    }
+}
+
 impl OutputHandler {
     pub fn new() -> Self {
         Self {
@@ -365,7 +371,7 @@ impl OutputHandler {
     }
 
     fn is_leap_year(year: u64) -> bool {
-        (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+        (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400)
     }
 }
 
