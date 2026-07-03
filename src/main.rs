@@ -2,6 +2,8 @@ use std::fmt::{self};
 
 use clap::{Parser, Subcommand};
 
+use std::io::{IsTerminal, stdout};
+
 use crate::{
     fuzz::{FuzzArgs, handle_fuzz},
     hashes::{HashArgs, handle_hash},
@@ -25,6 +27,9 @@ pub mod wordlists_iterator;
 #[derive(Parser, Debug)]
 #[command(name="keysweep", version, about, long_about=None)]
 struct Cli {
+    #[arg(short = 'B', long, default_value_t = false)]
+    no_banner: bool,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -51,9 +56,12 @@ impl fmt::Display for Command {
 fn main() {
     let args = Cli::parse();
 
-    print_banner();
-    println!("{}", args.command);
-    println!("___________________________________________________________________");
+    if stdout().is_terminal() && !args.no_banner {
+        print_banner();
+
+        println!("{}", args.command);
+        println!("___________________________________________________________________");
+    }
 
     match args.command {
         Command::Login(login) => handle_login(login),
