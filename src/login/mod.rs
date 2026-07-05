@@ -1,3 +1,4 @@
+pub mod basic_auth;
 pub mod form;
 
 use clap::{Args, Subcommand};
@@ -5,7 +6,10 @@ use std::fmt;
 
 use crate::{
     credentials::CredentialSource,
-    login::form::{FormParams, brute_form},
+    login::{
+        basic_auth::brute_basic_auth,
+        form::{FormParams, brute_form},
+    },
     outputs::OUTPUT_HANDLER,
     shared::{
         args::GeneralArgs,
@@ -40,6 +44,17 @@ pub enum LoginMode {
         /// Example: --spoof 100
         #[arg(short = 's', long, value_name = "COUNT")]
         spoof: Option<u32>,
+
+        /// Additional form fields to include in the request body
+        ///
+        /// Format: field1=value1,field2=value2
+        #[arg(long, value_delimiter = ',', value_name = "FIELDS")]
+        other_fields: Vec<String>,
+    },
+    BasicAuth {
+        /// Target URL requiring basic authentication
+        #[arg(short, long, value_name = "URL")]
+        url: String,
     },
 }
 
@@ -77,6 +92,7 @@ impl fmt::Display for LoginMode {
                 pass_field,
                 invalid_text,
                 spoof,
+                other_fields,
             } => {
                 let mut s = String::new();
                 let mut p = Pretty::new(&mut s, 12).indent(2);
@@ -94,6 +110,20 @@ impl fmt::Display for LoginMode {
                 if let Some(spoof) = spoof {
                     p.field("Spoof", spoof)?;
                 }
+
+                if !other_fields.is_empty() {
+                    p.field("Other Fields", fmt_vec(other_fields))?;
+                }
+
+                write!(f, "{s}")
+            }
+            LoginMode::BasicAuth { url } => {
+                let mut s = String::new();
+                let mut p = Pretty::new(&mut s, 12).indent(2);
+
+                writeln!(f, "Basic Auth")?;
+
+                p.field("URL", url)?;
 
                 write!(f, "{s}")
             }
@@ -142,6 +172,11 @@ pub fn handle_login(login: LoginArgs) {
         .set_formats(login.general.output_format.clone());
 
     let client = reqwest::blocking::Client::new();
+    let login_params = LoginParams {
+        users,
+        passwords,
+        general_args: login.general,
+    };
 
     match login.mode {
         LoginMode::Form {
@@ -150,13 +185,10 @@ pub fn handle_login(login: LoginArgs) {
             pass_field,
             invalid_text,
             spoof,
+            other_fields,
         } => {
             brute_form(
-                LoginParams {
-                    users,
-                    passwords,
-                    general_args: login.general,
-                },
+                login_params,
                 FormParams {
                     client,
                     url,
@@ -164,8 +196,12 @@ pub fn handle_login(login: LoginArgs) {
                     pass_field,
                     invalid_text,
                     spoof,
+                    other_fields,
                 },
             );
+        }
+        LoginMode::BasicAuth { url } => {
+            brute_basic_auth(login_params, url, client);
         }
     }
 }

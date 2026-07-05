@@ -69,6 +69,7 @@ Hash Cracking Example
 - **md-5, md4** - MD algorithms
 - **hmac** - HMAC authentication
 - **hex** - Hex encoding/decoding
+- **base64** - Base64 encoding/decoding
 - **indicatif** - Progress bars
 - **sha-crypt** - SHA crypt password hashing
 - **rand** - Random number generation

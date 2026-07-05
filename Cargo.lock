@@ -907,6 +907,7 @@ dependencies = [
 name = "keysweep"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "bcrypt",
  "clap",
  "crossbeam-channel",

