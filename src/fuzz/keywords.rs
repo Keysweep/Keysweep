@@ -120,7 +120,7 @@ pub fn load_wordlists(
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| format!("failed to read {}: {e}", b.path))?
             .into_iter()
-            .filter(|l| is_valid_line(l, filter.clone()))
+            .filter(|l| is_valid_line(l, &filter))
             .collect();
 
         if words.is_empty() {

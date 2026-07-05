@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread;
 
@@ -15,11 +16,10 @@ fn filtered_lines(
     filter: &WordlistFilter,
 ) -> Result<impl Iterator<Item = String>, String> {
     let file = File::open(path).map_err(|e| format!("failed to open {path}: {e}"))?;
-    let filter = filter.clone();
     Ok(BufReader::new(file)
         .lines()
         .map_while(Result::ok)
-        .filter(move |line| is_valid_line(line, filter.clone())))
+        .filter(move |line| is_valid_line(line, filter)))
 }
 
 fn read_filtered_lines(path: &str, filter: &WordlistFilter) -> Result<Vec<String>, String> {
@@ -106,7 +106,7 @@ where
     };
 
     let total = target_count * candidates.len() as u64;
-    let pb = create_progress(total);
+    let pb: Arc<ProgressBar> = create_progress(total);
     let threads = general_args.threads.max(1);
 
     match targets {
@@ -117,14 +117,20 @@ where
 
         CredentialSource::Wordlist(path) => {
             let (tx, rx) = crossbeam_channel::bounded::<String>(threads * 2);
-            let filter = general_args.filter.clone();
 
             thread::scope(|scope| {
+                let pb = &pb;
                 scope.spawn(move || {
-                    let Ok(file) = File::open(&path) else { return };
+                    let file = match File::open(&path) {
+                        Ok(file) => file,
+                        Err(e) => {
+                            pb.println(format!("failed to open {}: {}", path, e));
+                            return;
+                        }
+                    };
 
                     for line in BufReader::new(file).lines().map_while(Result::ok) {
-                        if !is_valid_line(&line, filter.clone()) {
+                        if !is_valid_line(&line, &general_args.filter) {
                             continue;
                         }
                         if tx.send(line).is_err() {
@@ -140,7 +146,6 @@ where
                     // this worker's own `rx`), not the originals.
                     let make_validator = &make_validator;
                     let candidates = &candidates;
-                    let pb = &pb;
                     let report = &report;
 
                     scope.spawn(move || {

@@ -1,6 +1,6 @@
 use crate::shared::args::WordlistFilter;
 
-pub fn is_valid_line(line: &str, filter: WordlistFilter) -> bool {
+pub fn is_valid_line(line: &str, filter: &WordlistFilter) -> bool {
     if filter.skip_empty && line.is_empty() {
         return false;
     }
