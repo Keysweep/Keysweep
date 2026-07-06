@@ -920,6 +920,7 @@ dependencies = [
  "md4",
  "rand",
  "reqwest",
+ "ripemd",
  "sha-crypt",
  "sha1",
  "sha2",
@@ -1223,6 +1224,15 @@ dependencies = [
  "libc",
  "untrusted",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "ripemd"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4dd4211456b4172d7e44261920c25acf07367c4f04bb5f5d54fc21b090d9b159"
+dependencies = [
+ "digest",
 ]
 
 [[package]]
