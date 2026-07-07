@@ -19,6 +19,7 @@ pub enum HashType {
     HMACMD5(HashCommonArgs),
     Ntlm(HashCommonArgs),
     NTLMV2(HashCommonArgs),
+    RIPEMD160(HashCommonArgs),
     SHA1(HashCommonArgs),
     SHA224(HashCommonArgs),
     SHA256(HashCommonArgs),
@@ -57,26 +58,35 @@ pub struct HashCommonArgs {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HashKind {
     Bcrypt,
+
     MD4,
     MD5,
+
     HMACMD4,
     HMACMD5,
+
     Ntlm,
     NTLMV2,
+
+    RIPEMD160,
+
     SHA1,
     SHA224,
     SHA256,
     SHA384,
     SHA512,
+
     SHA3_224,
     SHA3_256,
     SHA3_384,
     SHA3_512,
+
     HMACSHA1,
     HMACSHA224,
     HMACSHA256,
     HMACSHA384,
     HMACSHA512,
+
     SHACrypt,
 }
 
@@ -90,6 +100,7 @@ impl HashType {
             | HashType::HMACMD5(a)
             | HashType::Ntlm(a)
             | HashType::NTLMV2(a)
+            | HashType::RIPEMD160(a)
             | HashType::SHA1(a)
             | HashType::SHA224(a)
             | HashType::SHA256(a)
@@ -117,6 +128,7 @@ impl HashType {
             HashType::HMACMD5(_) => HashKind::HMACMD5,
             HashType::Ntlm(_) => HashKind::Ntlm,
             HashType::NTLMV2(_) => HashKind::NTLMV2,
+            HashType::RIPEMD160(_) => HashKind::RIPEMD160,
             HashType::SHA1(_) => HashKind::SHA1,
             HashType::SHA224(_) => HashKind::SHA224,
             HashType::SHA256(_) => HashKind::SHA256,
@@ -140,26 +152,35 @@ impl fmt::Display for HashKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let name = match self {
             HashKind::Bcrypt => "bcrypt",
+
             HashKind::MD4 => "MD4",
             HashKind::MD5 => "MD5",
+
             HashKind::HMACMD4 => "HMAC-MD4",
             HashKind::HMACMD5 => "HMAC-MD5",
+
             HashKind::Ntlm => "NTLM",
             HashKind::NTLMV2 => "NTLM v2",
+
+            HashKind::RIPEMD160 => "RIPEMD-160",
+
             HashKind::SHA1 => "SHA-1",
             HashKind::SHA224 => "SHA-224",
             HashKind::SHA256 => "SHA-256",
             HashKind::SHA384 => "SHA-384",
             HashKind::SHA512 => "SHA-512",
+
             HashKind::SHA3_224 => "SHA3-224",
             HashKind::SHA3_256 => "SHA3-256",
             HashKind::SHA3_384 => "SHA3-384",
             HashKind::SHA3_512 => "SHA3-512",
+
             HashKind::HMACSHA1 => "HMAC-SHA-1",
             HashKind::HMACSHA224 => "HMAC-SHA-224",
             HashKind::HMACSHA256 => "HMAC-SHA-256",
             HashKind::HMACSHA384 => "HMAC-SHA-384",
             HashKind::HMACSHA512 => "HMAC-SHA-512",
+
             HashKind::SHACrypt => "SHA-crypt",
         };
         write!(f, "{name}")

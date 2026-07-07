@@ -66,6 +66,7 @@ Hash Cracking Example
 - **digest** - Algorithm Traits
 - **bcrypt** - Bcrypt hashing
 - **sha1, sha2, sha3** - SHA algorithms
+- **ripemd** - RIPEMD hashing
 - **md-5, md4** - MD algorithms
 - **hmac** - HMAC authentication
 - **hex** - Hex encoding/decoding

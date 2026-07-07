@@ -2,6 +2,7 @@ use digest::Digest;
 use hmac::{Hmac, KeyInit, Mac};
 use md4::Md4;
 use md5::Md5;
+use ripemd::Ripemd160;
 use sha_crypt::{PasswordHash, PasswordVerifier, ShaCrypt};
 use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
@@ -89,26 +90,35 @@ pub fn verify_crypt(expected: &str, password: &str) -> bool {
 fn verify(hash_kind: HashKind, hash_bytes: Option<&[u8]>, hash: &str, word: &str) -> bool {
     match hash_kind {
         HashKind::Bcrypt => bcrypt::verify(word, hash).unwrap_or(false),
+
         HashKind::MD4 => verify_digest::<Md4>(hash_bytes, word),
         HashKind::MD5 => verify_digest::<Md5>(hash_bytes, word),
+
         HashKind::HMACMD4 => verify_hmac::<Md4>(hash, word),
         HashKind::HMACMD5 => verify_hmac::<Md5>(hash, word),
+
         HashKind::Ntlm => verify_ntlm(hash_bytes, word),
         HashKind::NTLMV2 => verify_ntlmv2(hash, word),
+
+        HashKind::RIPEMD160 => verify_digest::<Ripemd160>(hash_bytes, word),
+
         HashKind::SHA1 => verify_digest::<Sha1>(hash_bytes, word),
         HashKind::SHA224 => verify_digest::<Sha224>(hash_bytes, word),
         HashKind::SHA256 => verify_digest::<Sha256>(hash_bytes, word),
         HashKind::SHA384 => verify_digest::<Sha384>(hash_bytes, word),
         HashKind::SHA512 => verify_digest::<Sha512>(hash_bytes, word),
+
         HashKind::SHA3_224 => verify_digest::<Sha3_224>(hash_bytes, word),
         HashKind::SHA3_256 => verify_digest::<Sha3_256>(hash_bytes, word),
         HashKind::SHA3_384 => verify_digest::<Sha3_384>(hash_bytes, word),
         HashKind::SHA3_512 => verify_digest::<Sha3_512>(hash_bytes, word),
+
         HashKind::HMACSHA1 => verify_hmac::<Sha1>(hash, word),
         HashKind::HMACSHA224 => verify_hmac::<Sha224>(hash, word),
         HashKind::HMACSHA256 => verify_hmac::<Sha256>(hash, word),
         HashKind::HMACSHA384 => verify_hmac::<Sha384>(hash, word),
         HashKind::HMACSHA512 => verify_hmac::<Sha512>(hash, word),
+
         HashKind::SHACrypt => verify_crypt(hash, word),
     }
 }
@@ -185,6 +195,15 @@ mod tests {
     #[test]
     fn ntlmv2_rejects_malformed() {
         assert!(!verify(HashKind::NTLMV2, None, "not:valid", "password"));
+    }
+
+    // ── RIPEMD ───────────────────────────────────────────────────────────────
+
+    #[test]
+    fn ripemd160_password() {
+        let h = decoded("2c08e8f5884750a7b99f6f2f342fc638db25ff31");
+        assert!(verify(HashKind::RIPEMD160, Some(&h), "", "password"));
+        assert!(!verify(HashKind::RIPEMD160, Some(&h), "", "wrong"));
     }
 
     // ── SHA-1 / SHA-2 ─────────────────────────────────────────────────────────
