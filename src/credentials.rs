@@ -7,11 +7,16 @@ pub enum CredentialSource {
 }
 
 impl CredentialSource {
-    pub fn from_pair(single: Option<String>, list: Option<String>) -> Self {
+    pub fn from_pair(single: Option<String>, list: Option<String>) -> Result<Self, String> {
         match (single, list) {
-            (Some(v), None) => Self::Single(v),
-            (None, Some(p)) => Self::Wordlist(p),
-            _ => unreachable!("Keysweep enforces exactly one of these two args"),
+            (Some(v), None) => Ok(Self::Single(v)),
+            (None, Some(p)) => Ok(Self::Wordlist(p)),
+            (Some(_), Some(_)) => {
+                Err("Provide either a single credential or a wordlist path, not both".to_string())
+            }
+            (None, None) => Err(
+                "Provide exactly one credential source: single value or wordlist path".to_string(),
+            ),
         }
     }
 }

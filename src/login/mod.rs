@@ -145,8 +145,20 @@ fn build_login_params(creds: CredentialArgs, general: GeneralArgs) -> LoginParam
         .unwrap()
         .set_formats(general.output_format.clone());
 
-    let users = CredentialSource::from_pair(creds.username, creds.user_list);
-    let passwords = CredentialSource::from_pair(creds.password, creds.pass_list);
+    let users = match CredentialSource::from_pair(creds.username, creds.user_list) {
+        Ok(users) => users,
+        Err(err) => {
+            eprintln!("{err}");
+            std::process::exit(1);
+        }
+    };
+    let passwords = match CredentialSource::from_pair(creds.password, creds.pass_list) {
+        Ok(passwords) => passwords,
+        Err(err) => {
+            eprintln!("{err}");
+            std::process::exit(1);
+        }
+    };
 
     LoginParams {
         users,

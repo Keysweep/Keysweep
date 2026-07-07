@@ -127,7 +127,13 @@ pub fn handle_hash(args: HashArgs) {
     let common = args.hash_type.common_args().clone();
     let hash_kind = args.hash_type.kind();
 
-    let hashes = CredentialSource::from_pair(common.hash, common.hash_list);
+    let hashes = match CredentialSource::from_pair(common.hash, common.hash_list) {
+        Ok(hashes) => hashes,
+        Err(err) => {
+            eprintln!("{err}");
+            return;
+        }
+    };
 
     OUTPUT_HANDLER
         .lock()
@@ -145,15 +151,13 @@ pub fn handle_hash(args: HashArgs) {
         format!("[{GREEN}+{RESET}] Hash: {GREEN}{hash}{RESET} Word: {GREEN}{word}{RESET}")
     };
 
-    let result = run_search(
+    if let Err(err) = run_search(
         hashes,
         CredentialSource::Wordlist(common.word_list),
         common.general,
         make_validator,
         report,
-    );
-
-    if let Err(err) = result {
+    ) {
         eprintln!("{err}");
     }
 }
