@@ -6,7 +6,7 @@ use std::io::{IsTerminal, stdout};
 
 use crate::{
     fuzz::{FuzzArgs, handle_fuzz},
-    hashes::{HashArgs, handle_hash},
+    hashes::{handle_hash, types::HashArgs},
     login::{LoginArgs, handle_login},
     outputs::OUTPUT_HANDLER,
     theme::print_banner,
@@ -46,8 +46,8 @@ enum Command {
 impl fmt::Display for Command {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Command::Login(login) => write!(f, "=== LOGIN ===\n{login}"),
-            Command::Fuzz(fuzz) => write!(f, "=== FUZZ ===\n{fuzz}"),
+            Command::Login(login) => write!(f, "=== LOGIN ===\n{}", login.mode),
+            Command::Fuzz(fuzz) => write!(f, "=== FUZZ ===\n{}", fuzz.mode),
             Command::Hash(hash) => write!(f, "=== HASH ===\n{hash}"),
         }
     }
@@ -65,7 +65,7 @@ fn main() {
 
     match args.command {
         Command::Login(login) => handle_login(login),
-        Command::Fuzz(fuzz) => handle_fuzz(fuzz),
+        Command::Fuzz(fuzz) => handle_fuzz(fuzz.mode),
         Command::Hash(hash) => handle_hash(hash),
     }
 

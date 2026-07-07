@@ -12,7 +12,7 @@ use crate::{
     },
     outputs::OUTPUT_HANDLER,
     shared::{
-        args::GeneralArgs,
+        args::{CredentialArgs, GeneralArgs},
         args_display::{Pretty, fmt_vec},
     },
 };
@@ -21,8 +21,14 @@ use crate::{
 pub enum LoginMode {
     /// Submit credentials through an HTML login form
     Form {
+        #[command(flatten)]
+        creds: CredentialArgs,
+
+        #[command(flatten)]
+        general: GeneralArgs,
+
         /// Target login page URL
-        #[arg(short, long, value_name = "URL")]
+        #[arg(long, value_name = "URL")]
         url: String,
 
         /// Username field name
@@ -51,7 +57,14 @@ pub enum LoginMode {
         #[arg(long, value_delimiter = ',', value_name = "FIELDS")]
         other_fields: Vec<String>,
     },
+    /// Submit credentials through HTTP Basic Authentication
     BasicAuth {
+        #[command(flatten)]
+        creds: CredentialArgs,
+
+        #[command(flatten)]
+        general: GeneralArgs,
+
         /// Target URL requiring basic authentication
         #[arg(short, long, value_name = "URL")]
         url: String,
@@ -60,33 +73,18 @@ pub enum LoginMode {
 
 #[derive(Args, Debug)]
 pub struct LoginArgs {
-    /// Username to test
-    #[arg(short = 'u', long, conflicts_with = "user_list", value_name = "USER")]
-    pub username: Option<String>,
-
-    /// Password to test
-    #[arg(short = 'p', long, conflicts_with = "pass_list", value_name = "PASS")]
-    pub password: Option<String>,
-
-    /// File containing usernames (one per line)
-    #[arg(short = 'U', long, conflicts_with = "username", value_name = "FILE")]
-    pub user_list: Option<String>,
-
-    /// File containing passwords (one per line)
-    #[arg(short = 'P', long, conflicts_with = "password", value_name = "FILE")]
-    pub pass_list: Option<String>,
-
-    #[command(flatten)]
-    pub general: GeneralArgs,
-
     #[command(subcommand)]
     pub mode: LoginMode,
 }
 
 impl fmt::Display for LoginMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut s = String::new();
+        let mut p = Pretty::new(&mut s, 12).indent(2);
         match self {
             LoginMode::Form {
+                creds,
+                general,
                 url,
                 user_field,
                 pass_field,
@@ -94,10 +92,10 @@ impl fmt::Display for LoginMode {
                 spoof,
                 other_fields,
             } => {
-                let mut s = String::new();
-                let mut p = Pretty::new(&mut s, 12).indent(2);
-
                 writeln!(f, "Form")?;
+
+                creds.display(&mut p)?;
+                general.display(&mut p)?;
 
                 p.field("URL", url)?;
                 p.field("User Field", user_field)?;
@@ -117,41 +115,20 @@ impl fmt::Display for LoginMode {
 
                 write!(f, "{s}")
             }
-            LoginMode::BasicAuth { url } => {
-                let mut s = String::new();
-                let mut p = Pretty::new(&mut s, 12).indent(2);
-
+            LoginMode::BasicAuth {
+                creds,
+                general,
+                url,
+            } => {
                 writeln!(f, "Basic Auth")?;
 
+                creds.display(&mut p)?;
+                general.display(&mut p)?;
                 p.field("URL", url)?;
 
                 write!(f, "{s}")
             }
         }
-    }
-}
-
-impl fmt::Display for LoginArgs {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut s = String::new();
-        let mut p = Pretty::new(&mut s, 10);
-
-        match (&self.username, &self.user_list) {
-            (Some(user), _) => p.field("Username", user)?,
-            (_, Some(list)) => p.field("User List", list)?,
-            _ => {}
-        }
-
-        match (&self.password, &self.pass_list) {
-            (Some(pass), _) => p.field("Password", pass)?,
-            (_, Some(list)) => p.field("Pass List", list)?,
-            _ => {}
-        }
-
-        p.field("Mode", &self.mode)?;
-
-        write!(f, "{s}")?;
-        write!(f, "{}", self.general)
     }
 }
 
@@ -162,24 +139,29 @@ pub struct LoginParams {
     pub general_args: GeneralArgs,
 }
 
-pub fn handle_login(login: LoginArgs) {
-    let users = CredentialSource::from_pair(login.username, login.user_list);
-    let passwords = CredentialSource::from_pair(login.password, login.pass_list);
-
+fn build_login_params(creds: CredentialArgs, general: GeneralArgs) -> LoginParams {
     OUTPUT_HANDLER
         .lock()
         .unwrap()
-        .set_formats(login.general.output_format.clone());
+        .set_formats(general.output_format.clone());
 
-    let client = reqwest::blocking::Client::new();
-    let login_params = LoginParams {
+    let users = CredentialSource::from_pair(creds.username, creds.user_list);
+    let passwords = CredentialSource::from_pair(creds.password, creds.pass_list);
+
+    LoginParams {
         users,
         passwords,
-        general_args: login.general,
-    };
+        general_args: general,
+    }
+}
+
+pub fn handle_login(login: LoginArgs) {
+    let client = reqwest::blocking::Client::new();
 
     match login.mode {
         LoginMode::Form {
+            creds,
+            general,
             url,
             user_field,
             pass_field,
@@ -187,6 +169,8 @@ pub fn handle_login(login: LoginArgs) {
             spoof,
             other_fields,
         } => {
+            let login_params = build_login_params(creds, general);
+
             brute_form(
                 login_params,
                 FormParams {
@@ -200,7 +184,12 @@ pub fn handle_login(login: LoginArgs) {
                 },
             );
         }
-        LoginMode::BasicAuth { url } => {
+        LoginMode::BasicAuth {
+            creds,
+            general,
+            url,
+        } => {
+            let login_params = build_login_params(creds, general);
             brute_basic_auth(login_params, url, client);
         }
     }

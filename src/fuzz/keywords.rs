@@ -52,6 +52,15 @@ impl FromStr for CombineMode {
     }
 }
 
+impl fmt::Display for CombineMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CombineMode::Clusterbomb => write!(f, "clusterbomb"),
+            CombineMode::Pitchfork => write!(f, "pitchfork"),
+        }
+    }
+}
+
 /// A single `-w path/to/list.txt:KEYWORD` binding from the CLI.
 #[derive(Debug, Clone)]
 pub struct WordlistBinding {

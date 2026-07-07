@@ -1,4 +1,3 @@
-use clap::Args;
 use digest::Digest;
 use hmac::{Hmac, KeyInit, Mac};
 use md4::Md4;
@@ -16,51 +15,30 @@ use crate::{
     credentials::CredentialSource,
     hashes::{
         ntlm::{verify_ntlm, verify_ntlmv2},
-        types::HashType,
+        types::{HashArgs, HashKind},
     },
     outputs::OUTPUT_HANDLER,
-    shared::{args::GeneralArgs, args_display::Pretty},
+    shared::args_display::Pretty,
     theme::{GREEN, RESET},
     wordlists_iterator::run_search,
 };
-
-#[derive(Args, Debug)]
-pub struct HashArgs {
-    /// Hash to test
-    #[arg(long = "hash", conflicts_with = "hash_list", value_name = "HASH")]
-    hash: Option<String>,
-
-    /// File containing hashes (one per line)
-    #[arg(long = "hash_list", conflicts_with = "hash", value_name = "FILE")]
-    hash_list: Option<String>,
-
-    /// File containing words (one per line)
-    #[arg(short = 'W', long = "word_list", value_name = "FILE")]
-    word_list: String,
-
-    #[command(subcommand)]
-    hash_type: HashType,
-
-    #[command(flatten)]
-    general: GeneralArgs,
-}
 
 impl fmt::Display for HashArgs {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut s = String::new();
         let mut p = Pretty::new(&mut s, 10);
+        let common = self.hash_type.common_args();
 
-        match (&self.hash, &self.hash_list) {
+        match (&common.hash, &common.hash_list) {
             (Some(hash), _) => p.field("Hash", hash)?,
             (_, Some(list)) => p.field("Hash List", list)?,
             _ => {}
         }
 
-        p.field("Wordlist", &self.word_list)?;
-        p.field("Hash Type", self.hash_type)?;
+        p.field("Wordlist", &common.word_list)?;
+        p.field("Hash Type", self.hash_type.kind())?;
 
-        write!(f, "{s}")?;
-        write!(f, "{}", self.general)
+        write!(f, "{s}")
     }
 }
 
@@ -108,54 +86,48 @@ pub fn verify_crypt(expected: &str, password: &str) -> bool {
 /// Dispatch to the verifier matching `hash_type`. Digest-based types use
 /// `hash_bytes` (pre-decoded); text-based formats (bcrypt, NTLMv2, HMAC) parse
 /// `hash` themselves since they carry their own encoding (salt, params, etc).
-fn verify(hash_type: HashType, hash_bytes: Option<&[u8]>, hash: &str, word: &str) -> bool {
-    match hash_type {
-        HashType::Bcrypt => bcrypt::verify(word, hash).unwrap_or(false),
-
-        HashType::MD4 => verify_digest::<Md4>(hash_bytes, word),
-        HashType::MD5 => verify_digest::<Md5>(hash_bytes, word),
-
-        HashType::HMACMD4 => verify_hmac::<Md4>(hash, word),
-        HashType::HMACMD5 => verify_hmac::<Md5>(hash, word),
-
-        HashType::Ntlm => verify_ntlm(hash_bytes, word),
-        HashType::NTLMV2 => verify_ntlmv2(hash, word),
-
-        HashType::SHA1 => verify_digest::<Sha1>(hash_bytes, word),
-        HashType::SHA224 => verify_digest::<Sha224>(hash_bytes, word),
-        HashType::SHA256 => verify_digest::<Sha256>(hash_bytes, word),
-        HashType::SHA384 => verify_digest::<Sha384>(hash_bytes, word),
-        HashType::SHA512 => verify_digest::<Sha512>(hash_bytes, word),
-
-        HashType::SHA3_224 => verify_digest::<Sha3_224>(hash_bytes, word),
-        HashType::SHA3_256 => verify_digest::<Sha3_256>(hash_bytes, word),
-        HashType::SHA3_384 => verify_digest::<Sha3_384>(hash_bytes, word),
-        HashType::SHA3_512 => verify_digest::<Sha3_512>(hash_bytes, word),
-
-        HashType::HMACSHA1 => verify_hmac::<Sha1>(hash, word),
-        HashType::HMACSHA224 => verify_hmac::<Sha224>(hash, word),
-        HashType::HMACSHA256 => verify_hmac::<Sha256>(hash, word),
-        HashType::HMACSHA384 => verify_hmac::<Sha384>(hash, word),
-        HashType::HMACSHA512 => verify_hmac::<Sha512>(hash, word),
-
-        HashType::SHACrypt => verify_crypt(hash, word),
+fn verify(hash_kind: HashKind, hash_bytes: Option<&[u8]>, hash: &str, word: &str) -> bool {
+    match hash_kind {
+        HashKind::Bcrypt => bcrypt::verify(word, hash).unwrap_or(false),
+        HashKind::MD4 => verify_digest::<Md4>(hash_bytes, word),
+        HashKind::MD5 => verify_digest::<Md5>(hash_bytes, word),
+        HashKind::HMACMD4 => verify_hmac::<Md4>(hash, word),
+        HashKind::HMACMD5 => verify_hmac::<Md5>(hash, word),
+        HashKind::Ntlm => verify_ntlm(hash_bytes, word),
+        HashKind::NTLMV2 => verify_ntlmv2(hash, word),
+        HashKind::SHA1 => verify_digest::<Sha1>(hash_bytes, word),
+        HashKind::SHA224 => verify_digest::<Sha224>(hash_bytes, word),
+        HashKind::SHA256 => verify_digest::<Sha256>(hash_bytes, word),
+        HashKind::SHA384 => verify_digest::<Sha384>(hash_bytes, word),
+        HashKind::SHA512 => verify_digest::<Sha512>(hash_bytes, word),
+        HashKind::SHA3_224 => verify_digest::<Sha3_224>(hash_bytes, word),
+        HashKind::SHA3_256 => verify_digest::<Sha3_256>(hash_bytes, word),
+        HashKind::SHA3_384 => verify_digest::<Sha3_384>(hash_bytes, word),
+        HashKind::SHA3_512 => verify_digest::<Sha3_512>(hash_bytes, word),
+        HashKind::HMACSHA1 => verify_hmac::<Sha1>(hash, word),
+        HashKind::HMACSHA224 => verify_hmac::<Sha224>(hash, word),
+        HashKind::HMACSHA256 => verify_hmac::<Sha256>(hash, word),
+        HashKind::HMACSHA384 => verify_hmac::<Sha384>(hash, word),
+        HashKind::HMACSHA512 => verify_hmac::<Sha512>(hash, word),
+        HashKind::SHACrypt => verify_crypt(hash, word),
     }
 }
 
-pub fn handle_hash(hash: HashArgs) {
-    let hashes = CredentialSource::from_pair(hash.hash, hash.hash_list);
-    let hash_type = hash.hash_type;
+pub fn handle_hash(args: HashArgs) {
+    let common = args.hash_type.common_args().clone();
+    let hash_kind = args.hash_type.kind();
+
+    let hashes = CredentialSource::from_pair(common.hash, common.hash_list);
 
     OUTPUT_HANDLER
         .lock()
         .unwrap()
-        .set_formats(hash.general.output_format.clone());
+        .set_formats(common.general.output_format.clone());
 
-    // Decode each hash's hex once per target rather than once per candidate word.
     let make_validator = move |target: &str| {
         let hash_bytes = hex::decode(target).ok();
         let target = target.to_owned();
-        move |word: &str| verify(hash_type, hash_bytes.as_deref(), &target, word)
+        move |word: &str| verify(hash_kind, hash_bytes.as_deref(), &target, word)
     };
 
     let report = |hash: &str, word: &str| {
@@ -165,8 +137,8 @@ pub fn handle_hash(hash: HashArgs) {
 
     let result = run_search(
         hashes,
-        CredentialSource::Wordlist(hash.word_list),
-        hash.general,
+        CredentialSource::Wordlist(common.word_list),
+        common.general,
         make_validator,
         report,
     );
@@ -190,15 +162,15 @@ mod tests {
     #[test]
     fn md4_password() {
         let h = decoded("8a9d093f14f8701df17732b2bb182c74");
-        assert!(verify(HashType::MD4, Some(&h), "", "password"));
-        assert!(!verify(HashType::MD4, Some(&h), "", "wrong"));
+        assert!(verify(HashKind::MD4, Some(&h), "", "password"));
+        assert!(!verify(HashKind::MD4, Some(&h), "", "wrong"));
     }
 
     #[test]
     fn md5_password() {
         let h = decoded("5f4dcc3b5aa765d61d8327deb882cf99");
-        assert!(verify(HashType::MD5, Some(&h), "", "password"));
-        assert!(!verify(HashType::MD5, Some(&h), "", "wrong"));
+        assert!(verify(HashKind::MD5, Some(&h), "", "password"));
+        assert!(!verify(HashKind::MD5, Some(&h), "", "wrong"));
     }
 
     // ── NTLM / NTLMv2 ────────────────────────────────────────────────────────
@@ -206,13 +178,13 @@ mod tests {
     #[test]
     fn ntlm_password() {
         let h = decoded("8846f7eaee8fb117ad06bdd830b7586c");
-        assert!(verify(HashType::Ntlm, Some(&h), "", "password"));
-        assert!(!verify(HashType::Ntlm, Some(&h), "", "wrong"));
+        assert!(verify(HashKind::Ntlm, Some(&h), "", "password"));
+        assert!(!verify(HashKind::Ntlm, Some(&h), "", "wrong"));
     }
 
     #[test]
     fn ntlmv2_rejects_malformed() {
-        assert!(!verify(HashType::NTLMV2, None, "not:valid", "password"));
+        assert!(!verify(HashKind::NTLMV2, None, "not:valid", "password"));
     }
 
     // ── SHA-1 / SHA-2 ─────────────────────────────────────────────────────────
@@ -220,22 +192,22 @@ mod tests {
     #[test]
     fn sha1_password() {
         let h = decoded("5baa61e4c9b93f3f0682250b6cf8331b7ee68fd8");
-        assert!(verify(HashType::SHA1, Some(&h), "", "password"));
-        assert!(!verify(HashType::SHA1, Some(&h), "", "wrong"));
+        assert!(verify(HashKind::SHA1, Some(&h), "", "password"));
+        assert!(!verify(HashKind::SHA1, Some(&h), "", "wrong"));
     }
 
     #[test]
     fn sha224_password() {
         let h = decoded("d63dc919e201d7bc4c825630d2cf25fdc93d4b2f0d46706d29038d01");
-        assert!(verify(HashType::SHA224, Some(&h), "", "password"));
-        assert!(!verify(HashType::SHA224, Some(&h), "", "wrong"));
+        assert!(verify(HashKind::SHA224, Some(&h), "", "password"));
+        assert!(!verify(HashKind::SHA224, Some(&h), "", "wrong"));
     }
 
     #[test]
     fn sha256_password() {
         let h = decoded("5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8");
-        assert!(verify(HashType::SHA256, Some(&h), "", "password"));
-        assert!(!verify(HashType::SHA256, Some(&h), "", "wrong"));
+        assert!(verify(HashKind::SHA256, Some(&h), "", "password"));
+        assert!(!verify(HashKind::SHA256, Some(&h), "", "wrong"));
     }
 
     #[test]
@@ -243,8 +215,8 @@ mod tests {
         let h = decoded(
             "a8b64babd0aca91a59bdbb7761b421d4f2bb38280d3a75ba0f21f2bebc45583d446c598660c94ce680c47d19c30783a7",
         );
-        assert!(verify(HashType::SHA384, Some(&h), "", "password"));
-        assert!(!verify(HashType::SHA384, Some(&h), "", "wrong"));
+        assert!(verify(HashKind::SHA384, Some(&h), "", "password"));
+        assert!(!verify(HashKind::SHA384, Some(&h), "", "wrong"));
     }
 
     #[test]
@@ -252,8 +224,8 @@ mod tests {
         let h = decoded(
             "b109f3bbbc244eb82441917ed06d618b9008dd09b3befd1b5e07394c706a8bb980b1d7785e5976ec049b46df5f1326af5a2ea6d103fd07c95385ffab0cacbc86",
         );
-        assert!(verify(HashType::SHA512, Some(&h), "", "password"));
-        assert!(!verify(HashType::SHA512, Some(&h), "", "wrong"));
+        assert!(verify(HashKind::SHA512, Some(&h), "", "password"));
+        assert!(!verify(HashKind::SHA512, Some(&h), "", "wrong"));
     }
 
     // ── SHA-3 ─────────────────────────────────────────────────────────────────
@@ -261,15 +233,15 @@ mod tests {
     #[test]
     fn sha3_224_password() {
         let h = decoded("c3f847612c3780385a859a1993dfd9fe7c4e6d7f477148e527e9374c");
-        assert!(verify(HashType::SHA3_224, Some(&h), "", "password"));
-        assert!(!verify(HashType::SHA3_224, Some(&h), "", "wrong"));
+        assert!(verify(HashKind::SHA3_224, Some(&h), "", "password"));
+        assert!(!verify(HashKind::SHA3_224, Some(&h), "", "wrong"));
     }
 
     #[test]
     fn sha3_256_password() {
         let h = decoded("c0067d4af4e87f00dbac63b6156828237059172d1bbeac67427345d6a9fda484");
-        assert!(verify(HashType::SHA3_256, Some(&h), "", "password"));
-        assert!(!verify(HashType::SHA3_256, Some(&h), "", "wrong"));
+        assert!(verify(HashKind::SHA3_256, Some(&h), "", "password"));
+        assert!(!verify(HashKind::SHA3_256, Some(&h), "", "wrong"));
     }
 
     #[test]
@@ -277,8 +249,8 @@ mod tests {
         let h = decoded(
             "9c1565e99afa2ce7800e96a73c125363c06697c5674d59f227b3368fd00b85ead506eefa90702673d873cb2c9357eafc",
         );
-        assert!(verify(HashType::SHA3_384, Some(&h), "", "password"));
-        assert!(!verify(HashType::SHA3_384, Some(&h), "", "wrong"));
+        assert!(verify(HashKind::SHA3_384, Some(&h), "", "password"));
+        assert!(!verify(HashKind::SHA3_384, Some(&h), "", "wrong"));
     }
 
     #[test]
@@ -286,8 +258,8 @@ mod tests {
         let h = decoded(
             "e9a75486736a550af4fea861e2378305c4a555a05094dee1dca2f68afea49cc3a50e8de6ea131ea521311f4d6fb054a146e8282f8e35ff2e6368c1a62e909716",
         );
-        assert!(verify(HashType::SHA3_512, Some(&h), "", "password"));
-        assert!(!verify(HashType::SHA3_512, Some(&h), "", "wrong"));
+        assert!(verify(HashKind::SHA3_512, Some(&h), "", "password"));
+        assert!(!verify(HashKind::SHA3_512, Some(&h), "", "wrong"));
     }
 
     // ── HMAC ─────────────────────────────────────────────────────────────────
@@ -297,13 +269,13 @@ mod tests {
     fn hmac_md4_password() {
         // HMAC-MD4("password", key="secret")
         assert!(verify(
-            HashType::HMACMD4,
+            HashKind::HMACMD4,
             None,
             "72c9b58b2c7c34e7b63d1378bce82bf7:secret",
             "password"
         ));
         assert!(!verify(
-            HashType::HMACMD4,
+            HashKind::HMACMD4,
             None,
             "72c9b58b2c7c34e7b63d1378bce82bf7:secret",
             "wrong"
@@ -313,13 +285,13 @@ mod tests {
     #[test]
     fn hmac_md5_password() {
         assert!(verify(
-            HashType::HMACMD5,
+            HashKind::HMACMD5,
             None,
             "bd0ef7878fb434715c14a6243e89cdcd:secret",
             "password"
         ));
         assert!(!verify(
-            HashType::HMACMD5,
+            HashKind::HMACMD5,
             None,
             "bd0ef7878fb434715c14a6243e89cdcd:secret",
             "wrong"
@@ -329,13 +301,13 @@ mod tests {
     #[test]
     fn hmac_sha1_password() {
         assert!(verify(
-            HashType::HMACSHA1,
+            HashKind::HMACSHA1,
             None,
             "a462b4d910544d3ffb39f3a64017f65e029b73fb:secret",
             "password"
         ));
         assert!(!verify(
-            HashType::HMACSHA1,
+            HashKind::HMACSHA1,
             None,
             "a462b4d910544d3ffb39f3a64017f65e029b73fb:secret",
             "wrong"
@@ -345,13 +317,13 @@ mod tests {
     #[test]
     fn hmac_sha224_password() {
         assert!(verify(
-            HashType::HMACSHA224,
+            HashKind::HMACSHA224,
             None,
             "0b075ca0fc775abf264323daa7cf1717ac1ea0c13fda722098b9319b:secret",
             "password"
         ));
         assert!(!verify(
-            HashType::HMACSHA224,
+            HashKind::HMACSHA224,
             None,
             "0b075ca0fc775abf264323daa7cf1717ac1ea0c13fda722098b9319b:secret",
             "wrong"
@@ -361,13 +333,13 @@ mod tests {
     #[test]
     fn hmac_sha256_password() {
         assert!(verify(
-            HashType::HMACSHA256,
+            HashKind::HMACSHA256,
             None,
             "8c9a239e21f7bb939f8b570ae81daa50028d6a3d3250111e2d4cd269c2ab54bb:secret",
             "password"
         ));
         assert!(!verify(
-            HashType::HMACSHA256,
+            HashKind::HMACSHA256,
             None,
             "8c9a239e21f7bb939f8b570ae81daa50028d6a3d3250111e2d4cd269c2ab54bb:secret",
             "wrong"
@@ -377,13 +349,13 @@ mod tests {
     #[test]
     fn hmac_sha384_password() {
         assert!(verify(
-            HashType::HMACSHA384,
+            HashKind::HMACSHA384,
             None,
             "daf4e8194eb94fc440dedeecfacea9d5723cd26cdacf7aeafc8667def04d93e99799faf4a07358e6a8414d911860ba47:secret",
             "password"
         ));
         assert!(!verify(
-            HashType::HMACSHA384,
+            HashKind::HMACSHA384,
             None,
             "daf4e8194eb94fc440dedeecfacea9d5723cd26cdacf7aeafc8667def04d93e99799faf4a07358e6a8414d911860ba47:secret",
             "wrong"
@@ -393,13 +365,13 @@ mod tests {
     #[test]
     fn hmac_sha512_password() {
         assert!(verify(
-            HashType::HMACSHA512,
+            HashKind::HMACSHA512,
             None,
             "ae46ed1b06dd57eb684ff2561a191fa34b9626d2d56edd30d203e6842d58ba7b3fcf313edea05a284bbe7e6f8c8a21ad043a10f9183af16ffbdf91350f10d010:secret",
             "password"
         ));
         assert!(!verify(
-            HashType::HMACSHA512,
+            HashKind::HMACSHA512,
             None,
             "ae46ed1b06dd57eb684ff2561a191fa34b9626d2d56edd30d203e6842d58ba7b3fcf313edea05a284bbe7e6f8c8a21ad043a10f9183af16ffbdf91350f10d010:secret",
             "wrong"
@@ -412,8 +384,8 @@ mod tests {
     fn bcrypt_password() {
         // Pre-generated: bcrypt.hashpw(b"password", bcrypt.gensalt())
         let hash = "$2b$12$2YEMWcUT6XImeU12rlPZc.kiZwj/Z183pDlWwgTbgyKh8ROniEOwi";
-        assert!(verify(HashType::Bcrypt, None, hash, "password"));
-        assert!(!verify(HashType::Bcrypt, None, hash, "wrong"));
+        assert!(verify(HashKind::Bcrypt, None, hash, "password"));
+        assert!(!verify(HashKind::Bcrypt, None, hash, "wrong"));
     }
 
     // ── SHACrypt ──────────────────────────────────────────────────────────────

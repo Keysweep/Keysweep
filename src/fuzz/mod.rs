@@ -9,153 +9,129 @@ use clap::{Args, Subcommand};
 pub mod keywords;
 pub mod targets;
 
-use keywords::{CombineMode, WordlistBinding};
+use keywords::CombineMode;
 use targets::http::{HttpTarget, parse_headers};
 use targets::{FireResult, FuzzTarget};
 
 use crate::outputs::OUTPUT_HANDLER;
-use crate::shared::args::GeneralArgs;
+use crate::shared::args::{FuzzGeneralArgs, GeneralArgs};
 use crate::shared::args_display::{Pretty, fmt_vec};
 use crate::theme::{GREEN, MAGENTA, RED, RESET, YELLOW};
 use crate::utils::create_progress;
 
-#[derive(Subcommand, Debug)]
-pub enum FuzzMode {
-    /// Fuzz an HTTP(S) target: URL, headers, and/or body may contain FUZZ keywords
-    Http {
-        /// Target URL containing one or more FUZZ-style keywords
-        ///
-        /// Example: https://example.com/FUZZ or https://example.com/page?id=FUZZ&t=FUZ2Z
-        #[arg(short, long, value_name = "URL")]
-        url: String,
-
-        /// HTTP method to use
-        #[arg(short = 'X', long, default_value = "GET", value_name = "METHOD")]
-        method: String,
-
-        /// Extra header, may contain a FUZZ keyword in its value. Repeatable.
-        ///
-        /// Example: -H "Authorization: Bearer FUZZ"
-        #[arg(short = 'H', long = "header", value_name = "NAME: VALUE")]
-        headers: Vec<String>,
-
-        /// Request body template, may contain FUZZ keywords (e.g. for POST/PUT)
-        #[arg(short = 'd', long = "data", value_name = "BODY")]
-        body: Option<String>,
-
-        /// Per-request timeout in milliseconds
-        #[arg(long = "timeout-ms", default_value_t = 10_000, value_name = "MS")]
-        timeout_ms: u64,
-    },
+trait FuzzProtocol {
+    fn fuzz_args(&self) -> &FuzzGeneralArgs;
+    fn general(&self) -> &GeneralArgs;
+    fn build_target(self: Box<Self>) -> Result<Arc<dyn FuzzTarget>, String>;
+    fn display(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result;
 }
 
 #[derive(Args, Debug)]
-pub struct FuzzArgs {
-    /// Wordlist binding: PATH or PATH:KEYWORD. Repeatable for multiple FUZZ keywords.
-    ///
-    /// Example: -w users.txt:FUZZ -w pins.txt:FUZ2Z
-    /// A binding with no ':KEYWORD' suffix defaults to FUZZ.
-    #[arg(
-        short = 'w',
-        long = "fuzz-list",
-        value_name = "PATH[:KEYWORD]",
-        required = true
-    )]
-    fuzz_lists: Vec<WordlistBinding>,
-
-    /// How to combine multiple wordlists when more than one keyword is used
-    #[arg(long = "combine", default_value = "clusterbomb", value_name = "MODE")]
-    combine_mode: CombineMode,
-
-    /// Only report responses with these status codes (comma-separated)
-    ///
-    /// If unset, all are reported except those in --fc.
-    /// Example: --mc 200,301,403
-    #[arg(long = "mc", value_delimiter = ',', value_name = "CODES")]
-    match_codes: Vec<u16>,
-
-    /// Filter out responses with these status codes (comma-separated)
-    ///
-    /// Ignored if --mc is set. Example: --fc 404,400
-    #[arg(long = "fc", value_delimiter = ',', value_name = "CODES", default_values_t = vec![404])]
-    filter_codes: Vec<u16>,
-
-    /// Filter out responses with these body/payload sizes in bytes (comma-separated)
-    #[arg(long = "fs", value_delimiter = ',', value_name = "SIZES")]
-    filter_sizes: Vec<u64>,
-
-    /// Delay between each thread's requests, in milliseconds (0 = no throttling)
-    #[arg(long = "delay-ms", default_value_t = 0, value_name = "MS")]
-    delay_ms: u64,
+pub struct HttpFuzzArgs {
+    #[command(flatten)]
+    fuzz_args: FuzzGeneralArgs,
 
     #[command(flatten)]
     general: GeneralArgs,
 
-    #[command(subcommand)]
-    mode: FuzzMode,
+    /// Target URL containing one or more FUZZ-style keywords
+    ///
+    /// Example: https://example.com/FUZZ or https://example.com/page?id=FUZZ&t=FUZ2Z
+    #[arg(short, long, value_name = "URL")]
+    url: String,
+
+    /// HTTP method to use
+    #[arg(short = 'X', long, default_value = "GET", value_name = "METHOD")]
+    method: String,
+
+    /// Extra header, may contain a FUZZ keyword in its value. Repeatable.
+    ///
+    /// Example: -H "Authorization: Bearer FUZZ"
+    #[arg(short = 'H', long = "header", value_name = "NAME: VALUE")]
+    headers: Vec<String>,
+
+    /// Request body template, may contain FUZZ keywords (e.g. for POST/PUT)
+    #[arg(short = 'd', long = "data", value_name = "BODY")]
+    body: Option<String>,
+
+    /// Per-request timeout in milliseconds
+    #[arg(long = "timeout-ms", default_value_t = 10_000, value_name = "MS")]
+    timeout_ms: u64,
+}
+
+impl FuzzProtocol for HttpFuzzArgs {
+    fn fuzz_args(&self) -> &FuzzGeneralArgs {
+        &self.fuzz_args
+    }
+
+    fn general(&self) -> &GeneralArgs {
+        &self.general
+    }
+
+    fn build_target(self: Box<Self>) -> Result<Arc<dyn FuzzTarget>, String> {
+        let header_templates = parse_headers(&self.headers)?;
+        let target = HttpTarget::new(
+            self.url,
+            self.method,
+            header_templates,
+            self.body,
+            Duration::from_millis(self.timeout_ms),
+        )?;
+        Ok(Arc::new(target))
+    }
+
+    fn display(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut s = String::new();
+        let mut p = Pretty::new(&mut s, 8).indent(2);
+
+        writeln!(f, "HTTP")?;
+
+        self.fuzz_args.display(&mut p)?;
+        self.general.display(&mut p)?;
+
+        p.field("URL", &self.url)?;
+        p.field("Method", &self.method)?;
+
+        if !self.headers.is_empty() {
+            p.field("Headers", fmt_vec(&self.headers))?;
+        }
+
+        if let Some(body) = &self.body {
+            p.field("Body", body)?;
+        }
+
+        p.field("Timeout", format!("{}ms", self.timeout_ms))?;
+
+        write!(f, "{s}")
+    }
+}
+
+#[derive(Subcommand, Debug)]
+pub enum FuzzMode {
+    /// Fuzz an HTTP(S) target: URL, headers, and/or body may contain FUZZ keywords
+    Http(HttpFuzzArgs),
+}
+
+impl FuzzMode {
+    fn into_protocol(self) -> Box<dyn FuzzProtocol> {
+        match self {
+            FuzzMode::Http(args) => Box::new(args),
+        }
+    }
 }
 
 impl fmt::Display for FuzzMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FuzzMode::Http {
-                url,
-                method,
-                headers,
-                body,
-                timeout_ms,
-            } => {
-                let mut s = String::new();
-                let mut p = Pretty::new(&mut s, 8).indent(2);
-
-                writeln!(f, "HTTP")?;
-
-                p.field("URL", url)?;
-                p.field("Method", method)?;
-
-                if !headers.is_empty() {
-                    p.field("Headers", fmt_vec(headers))?;
-                }
-
-                if let Some(body) = body {
-                    p.field("Body", body)?;
-                }
-
-                p.field("Timeout", format!("{timeout_ms}ms"))?;
-
-                write!(f, "{s}")
-            }
+            FuzzMode::Http(args) => args.display(f),
         }
     }
 }
 
-impl fmt::Display for FuzzArgs {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut s = String::new();
-        let mut p = Pretty::new(&mut s, 12);
-
-        p.field("Fuzz Lists", fmt_vec(&self.fuzz_lists))?;
-
-        p.field("Combine Mode", format!("{:?}", self.combine_mode))?;
-
-        if !&self.match_codes.is_empty() {
-            p.field("Match Codes", fmt_vec(&self.match_codes))?;
-        }
-        if !&self.filter_codes.is_empty() {
-            p.field("Filter Codes", fmt_vec(&self.filter_codes))?;
-        }
-        if !&self.filter_sizes.is_empty() {
-            p.field("Filter Sizes", fmt_vec(&self.filter_sizes))?;
-        }
-        if self.delay_ms != 0 {
-            p.field("Delay", format!("{}ms", self.delay_ms))?;
-        }
-
-        p.field("Mode", &self.mode)?;
-
-        write!(f, "{s}")?;
-        write!(f, "{}", self.general)
-    }
+#[derive(Args, Debug)]
+pub struct FuzzArgs {
+    #[command(subcommand)]
+    pub mode: FuzzMode,
 }
 
 struct ReportFilter {
@@ -203,8 +179,14 @@ fn sub_label(sub: &keywords::Substitution) -> String {
         .join(" ")
 }
 
-pub fn handle_fuzz(fuzz: FuzzArgs) {
-    let lists = match keywords::load_wordlists(&fuzz.fuzz_lists, fuzz.general.filter) {
+pub fn handle_fuzz(mode: FuzzMode) {
+    let proto = mode.into_protocol();
+
+    // Cloned out before build_target() consumes `proto`.
+    let fuzz_args = proto.fuzz_args().clone();
+    let general = proto.general().clone();
+
+    let lists = match keywords::load_wordlists(&fuzz_args.fuzz_lists, general.filter) {
         Ok(l) => l,
         Err(e) => {
             eprintln!("{RED}error loading wordlists: {e}{RESET}");
@@ -212,14 +194,14 @@ pub fn handle_fuzz(fuzz: FuzzArgs) {
         }
     };
 
-    let combine_mode = fuzz.combine_mode;
+    let combine_mode = fuzz_args.combine_mode;
     let total = keywords::total_items(combine_mode, &lists);
     if total == 0 {
         eprintln!("{RED}no work items produced (empty wordlist combination){RESET}");
         return;
     }
 
-    let target: Arc<dyn FuzzTarget> = match build_target(fuzz.mode) {
+    let target: Arc<dyn FuzzTarget> = match proto.build_target() {
         Ok(t) => t,
         Err(e) => {
             eprintln!("{RED}error configuring target: {e}{RESET}");
@@ -230,10 +212,10 @@ pub fn handle_fuzz(fuzz: FuzzArgs) {
     OUTPUT_HANDLER
         .lock()
         .unwrap()
-        .set_formats(fuzz.general.output_format.clone());
+        .set_formats(general.output_format.clone());
 
-    let threads = fuzz.general.threads.max(1);
-    let delay = Duration::from_millis(fuzz.delay_ms);
+    let threads = general.threads.max(1);
+    let delay = Duration::from_millis(fuzz_args.delay_ms);
     let pb = create_progress(total);
     let index = Arc::new(AtomicU64::new(0));
 
@@ -242,9 +224,9 @@ pub fn handle_fuzz(fuzz: FuzzArgs) {
         lists: Arc::new(lists),
         target,
         filter: ReportFilter {
-            match_codes: Arc::new(fuzz.match_codes),
-            filter_codes: Arc::new(fuzz.filter_codes),
-            filter_sizes: Arc::new(fuzz.filter_sizes),
+            match_codes: Arc::new(fuzz_args.match_codes),
+            filter_codes: Arc::new(fuzz_args.filter_codes),
+            filter_sizes: Arc::new(fuzz_args.filter_sizes),
         },
     });
 
@@ -313,28 +295,6 @@ fn run_worker(
 
         if !delay.is_zero() {
             thread::sleep(delay);
-        }
-    }
-}
-
-fn build_target(mode: FuzzMode) -> Result<Arc<dyn FuzzTarget>, String> {
-    match mode {
-        FuzzMode::Http {
-            url,
-            method,
-            headers,
-            body,
-            timeout_ms,
-        } => {
-            let header_templates = parse_headers(&headers)?;
-            let target = HttpTarget::new(
-                url,
-                method,
-                header_templates,
-                body,
-                Duration::from_millis(timeout_ms),
-            )?;
-            Ok(Arc::new(target))
         }
     }
 }
