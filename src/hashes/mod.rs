@@ -3,6 +3,7 @@ use digest::Digest;
 use hmac::{Hmac, KeyInit, Mac};
 use md4::Md4;
 use md5::Md5;
+use ripemd::Ripemd160;
 use sha_crypt::{PasswordHash, PasswordVerifier, ShaCrypt};
 use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
@@ -121,6 +122,8 @@ fn verify(hash_type: HashType, hash_bytes: Option<&[u8]>, hash: &str, word: &str
         HashType::Ntlm => verify_ntlm(hash_bytes, word),
         HashType::NTLMV2 => verify_ntlmv2(hash, word),
 
+        HashType::RIPEMD160 => verify_digest::<Ripemd160>(hash_bytes, word),
+
         HashType::SHA1 => verify_digest::<Sha1>(hash_bytes, word),
         HashType::SHA224 => verify_digest::<Sha224>(hash_bytes, word),
         HashType::SHA256 => verify_digest::<Sha256>(hash_bytes, word),
@@ -213,6 +216,15 @@ mod tests {
     #[test]
     fn ntlmv2_rejects_malformed() {
         assert!(!verify(HashType::NTLMV2, None, "not:valid", "password"));
+    }
+
+    // ── RIPEMD ───────────────────────────────────────────────────────────────
+
+    #[test]
+    fn ripemd160_password() {
+        let h = decoded("2c08e8f5884750a7b99f6f2f342fc638db25ff31");
+        assert!(verify(HashType::RIPEMD160, Some(&h), "", "password"));
+        assert!(!verify(HashType::RIPEMD160, Some(&h), "", "wrong"));
     }
 
     // ── SHA-1 / SHA-2 ─────────────────────────────────────────────────────────

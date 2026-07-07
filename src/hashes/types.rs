@@ -15,6 +15,8 @@ pub enum HashType {
     Ntlm,
     NTLMV2,
 
+    RIPEMD160,
+
     SHA1,
     SHA224,
     SHA256,
@@ -48,6 +50,8 @@ impl fmt::Display for HashType {
 
             HashType::Ntlm => "NTLM",
             HashType::NTLMV2 => "NTLM v2",
+
+            HashType::RIPEMD160 => "RIPEMD-160",
 
             HashType::SHA1 => "SHA-1",
             HashType::SHA224 => "SHA-224",
