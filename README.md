@@ -27,6 +27,26 @@ Designed with performance, concurrency, and extensibility in mind.
 
 More modules and protocols are planned.
 
+## Usage
+
+Keysweep provides built-in documentation for every command.
+
+- keysweep --help
+- keysweep login --help
+- keysweep fuzz --help
+- keysweep hash --help
+
+## Examples
+
+Hash Cracking Example:
+![HashCrack](docs/images/hash_crack_example.png)
+
+Form Login Example:
+![FormLogin](docs/images/login_form_example.png)
+
+Fuzz Http Example:
+![FuzzHttp](docs/images/fuzz_http_example.png)
+
 ## Installation
 
 ### Prerequisites
@@ -43,20 +63,6 @@ cargo build --release
 ```
 
 The compiled binary will be located at `target/release/keysweep`.
-
-## Usage
-
-Keysweep provides built-in documentation for every command.
-
-- keysweep --help
-- keysweep login --help
-- keysweep fuzz --help
-- keysweep hash --help
-
-## Examples
-
-Hash Cracking Example
-![HashCrack](docs/images/hash_crack_example.png)
 
 ## Dependencies
 
