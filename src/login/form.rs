@@ -48,13 +48,18 @@ pub fn brute_form(login_params: LoginParams, form_params: FormParams) {
             builder = builder.header("X-Forwarded-For", spoofer.select_ip());
         }
 
-        builder = builder.body(format!("{user_field}={user}&{pass_field}={pass}"));
-
+        let mut body = format!("{user_field}={user}&{pass_field}={pass}");
         for field in &other_fields {
             if let Some((key, value)) = field.split_once('=') {
-                builder = builder.body(format!("&{key}={value}"));
+                body.push('&');
+                body.push_str(key);
+                body.push('=');
+                body.push_str(value);
             }
         }
+
+        builder = builder.body(body);
+
         let res = builder.send();
 
         match res {
