@@ -415,8 +415,9 @@ mod tests {
 
     #[test]
     fn sha_crypt_password() {
-        // TODO: generate with `sha_crypt::sha512_simple("password", &Sha512Params::new(5000).unwrap())`
-        // and paste the resulting "$6$..." string here.
-        let _ = "placeholder — fill in a real $5$/sha256 or $6$/sha512 crypt hash";
+        // SHA-512-crypt test vector from the SHA-crypt specification.
+        let hash = "$6$saltstring$svn8UoSVapNtMuq1ukKS4tPQd8iKwSMHWjl/O817G3uBnIFNjnQJuesI68u4OTLiBFdcbYEdFCoEOfaS35inz1";
+        assert!(verify(HashKind::SHACrypt, None, hash, "Hello world!"));
+        assert!(!verify(HashKind::SHACrypt, None, hash, "wrong"));
     }
 }
